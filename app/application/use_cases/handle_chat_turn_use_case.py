@@ -33,15 +33,20 @@ class HandleChatTurnUseCase:
         """
         # Get or create conversation state
         state = await self._state_repository.get(request.session_id)
+        if state is None:
+            state = ConversationState(session_id=request.session_id)
 
         # Process message and update state
         self._process_message(request.message, state)
 
         # Determine next action and generate response
         reply, next_action, suggested_questions = self._generate_response(state)
+        
+        # Update last_question with the reply
+        state.last_question = reply
 
         # Save updated state
-        await self._state_repository.save(state)
+        await self._state_repository.save(request.session_id, state)
 
         return ChatResponse(
             session_id=request.session_id,
@@ -49,12 +54,12 @@ class HandleChatTurnUseCase:
             next_action=next_action,
             suggested_questions=suggested_questions,
             debug={
-                "current_step": state.current_step,
+                "step": state.step,
                 "need": state.need,
                 "budget": state.budget,
                 "preferences": state.preferences,
                 "financing_interest": state.financing_interest,
-                "contact_intent": state.contact_intent,
+                "last_question": state.last_question,
             },
         )
 
@@ -94,7 +99,7 @@ class HandleChatTurnUseCase:
             for keyword, value in need_keywords.items():
                 if keyword in message_lower:
                     state.need = value
-                    state.current_step = "budget"
+                    state.step = "budget"
                     break
 
         # Extract budget - look for numbers with currency symbols
@@ -105,7 +110,7 @@ class HandleChatTurnUseCase:
             if prices:
                 # Take the first price found
                 state.budget = prices[0]
-                state.current_step = "options"
+                state.step = "options"
             # Look for budget keywords in Spanish
             elif any(
                 word in message_lower
@@ -161,34 +166,29 @@ class HandleChatTurnUseCase:
                 negative_keywords = ["no", "contado", "efectivo", "cash", "pay"]
                 if any(word in message_lower for word in positive_keywords):
                     state.financing_interest = True
-                    state.current_step = "financing"
+                    state.step = "financing"
                 elif any(word in message_lower for word in negative_keywords):
                     state.financing_interest = False
-                    state.current_step = "next_action"
+                    state.step = "next_action"
 
-        # Extract contact intent - handle Spanish keywords
-        if state.contact_intent is None:
-            contact_keywords = [
-                "agendar",
-                "cita",
-                "visita",
-                "contacto",
-                "llamar",
-                "reunir",
-                "ver",
-                "schedule",
-                "appointment",
-                "visit",
-                "contact",
-                "call",
-                "meet",
-            ]
-            if any(word in message_lower for word in contact_keywords):
-                state.contact_intent = True
-                state.current_step = "next_action"
-            elif any(word in message_lower for word in ["no listo", "no estoy listo", "después", "más tarde", "tal vez", "not ready", "later", "maybe"]):
-                state.contact_intent = False
-                state.current_step = "next_action"
+        # Update step to next_action if user mentions scheduling/contact
+        contact_keywords = [
+            "agendar",
+            "cita",
+            "visita",
+            "contacto",
+            "llamar",
+            "reunir",
+            "ver",
+            "schedule",
+            "appointment",
+            "visit",
+            "contact",
+            "call",
+            "meet",
+        ]
+        if any(word in message_lower for word in contact_keywords):
+            state.step = "next_action"
 
     def _generate_response(
         self, state: ConversationState
@@ -231,20 +231,6 @@ class HandleChatTurnUseCase:
                 "ask_financing",
                 UserMessagesES.SUGGESTED_FINANCING,
             )
-
-        elif missing_field == "contact_intent":
-            if state.financing_interest:
-                return (
-                    UserMessagesES.ASK_CONTACT_WITH_FINANCING,
-                    "ask_contact",
-                    UserMessagesES.SUGGESTED_CONTACT_WITH_FINANCING,
-                )
-            else:
-                return (
-                    UserMessagesES.ASK_CONTACT_WITHOUT_FINANCING,
-                    "ask_contact",
-                    UserMessagesES.SUGGESTED_CONTACT_WITHOUT_FINANCING,
-                )
 
         else:
             # All fields collected

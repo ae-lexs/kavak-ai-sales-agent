@@ -1,2 +1,37 @@
 """Dependency injection container."""
 
+from app.adapters.outbound.llm_rag.chat_adapter import LLMRAGChatAdapter
+from app.adapters.outbound.state.conversation_state_repository import (
+    InMemoryConversationStateRepository,
+)
+from app.application.ports.conversation_state_repository import ConversationStateRepository
+from app.application.use_cases.chat_use_case import ChatUseCase
+
+
+class Container:
+    """Dependency injection container."""
+
+    def __init__(self) -> None:
+        """Initialize container with dependencies."""
+        # State repository
+        self._state_repository: ConversationStateRepository = InMemoryConversationStateRepository()
+
+        # Chat adapter (uses state repository internally)
+        self._chat_adapter = LLMRAGChatAdapter(self._state_repository)
+
+        # Use cases
+        self._chat_use_case = ChatUseCase(self._chat_adapter)
+
+    @property
+    def chat_use_case(self) -> ChatUseCase:
+        """Get chat use case."""
+        return self._chat_use_case
+
+    @property
+    def state_repository(self) -> ConversationStateRepository:
+        """Get state repository."""
+        return self._state_repository
+
+
+# Global container instance
+container = Container()

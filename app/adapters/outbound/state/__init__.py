@@ -1,0 +1,2 @@
+"""State outbound adapter."""
+

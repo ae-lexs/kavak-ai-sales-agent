@@ -3,14 +3,9 @@
 from fastapi import APIRouter, status
 
 from app.application.dtos.chat import ChatRequest, ChatResponse
-from app.application.use_cases.chat_use_case import ChatUseCase
-from app.adapters.outbound.llm_rag.chat_adapter import LLMRAGChatAdapter
+from app.infrastructure.wiring.container import container
 
 router = APIRouter()
-
-# Initialize dependencies (TODO: Replace with proper DI container)
-_chat_adapter = LLMRAGChatAdapter()
-_chat_use_case = ChatUseCase(_chat_adapter)
 
 
 @router.get("/health", status_code=status.HTTP_200_OK)
@@ -35,5 +30,5 @@ async def chat(request: ChatRequest) -> ChatResponse:
     Returns:
         Chat response with reply, next_action, suggested_questions, and optional debug info
     """
-    return await _chat_use_case.execute(request)
+    return await container.chat_use_case.execute(request)
 
