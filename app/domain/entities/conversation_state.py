@@ -13,6 +13,9 @@ class ConversationState:
     budget: Optional[str] = None
     preferences: Optional[str] = None  # make/model
     financing_interest: Optional[bool] = None
+    down_payment: Optional[str] = None  # Can be amount or percentage
+    loan_term: Optional[int] = None  # Term in months (36, 48, 60, 72)
+    selected_car_price: Optional[float] = None  # Price of selected car for financing
     last_question: Optional[str] = None
     step: str = "need"  # need -> budget -> options -> financing -> next_action
 

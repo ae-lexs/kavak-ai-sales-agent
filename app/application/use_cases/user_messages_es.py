@@ -91,6 +91,47 @@ class UserMessagesES:
         "¿Puedes enviarme más información?",
     ]
 
+    # Down payment collection
+    @staticmethod
+    def ask_down_payment(car_price: float) -> str:
+        """Generate down payment question."""
+        min_down = car_price * 0.10
+        return (
+            f"Perfecto. El precio del auto es ${car_price:,.0f} MXN. "
+            f"¿Cuál será tu enganche? El mínimo es ${min_down:,.0f} MXN (10%). "
+            "Puedes decirme un monto o un porcentaje."
+        )
+
+    SUGGESTED_DOWN_PAYMENT = [
+        "10% de enganche",
+        "$50,000 de enganche",
+        "20% de enganche",
+    ]
+
+    # Loan term collection
+    ASK_LOAN_TERM = (
+        "Excelente. ¿En cuántos meses te gustaría pagar? "
+        "Ofrecemos planes de 36, 48, 60 o 72 meses."
+    )
+    SUGGESTED_LOAN_TERM = [
+        "36 meses",
+        "48 meses",
+        "60 meses",
+        "72 meses",
+    ]
+
+    # Financing plans display
+    @staticmethod
+    def format_financing_plan(plan: dict) -> str:
+        """Format a financing plan for display."""
+        return (
+            f"{plan['term_months']} meses:\n"
+            f"  • Monto financiado: ${plan['financed_amount']:,.0f} MXN\n"
+            f"  • Pago mensual: ${plan['monthly_payment']:,.0f} MXN\n"
+            f"  • Total a pagar: ${plan['total_paid']:,.0f} MXN\n"
+            f"  • Intereses totales: ${plan['total_interest']:,.0f} MXN"
+        )
+
     # Completion message
     COMPLETE = (
         "¡Gracias por proporcionar toda la información! Tengo todo lo que necesito. "
