@@ -12,8 +12,11 @@ def test_conversation_state_initialization():
     assert state.budget is None
     assert state.preferences is None
     assert state.financing_interest is None
-    assert state.contact_intent is None
-    assert state.current_step == "need"
+    assert state.down_payment is None
+    assert state.loan_term is None
+    assert state.selected_car_price is None
+    assert state.last_question is None
+    assert state.step == "need"
 
 
 def test_conversation_state_is_complete():
@@ -46,7 +49,4 @@ def test_conversation_state_get_next_missing_field():
     assert state.get_next_missing_field() == "financing_interest"
 
     state.financing_interest = True
-    assert state.get_next_missing_field() == "contact_intent"
-
-    state.contact_intent = True
     assert state.get_next_missing_field() is None

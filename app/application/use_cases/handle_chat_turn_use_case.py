@@ -431,7 +431,7 @@ class HandleChatTurnUseCase:
 
             # Format plans
             plans_text = "\n\n".join(
-                [UserMessagesES.format_financing_plan(plan.dict()) for plan in plans]
+                [UserMessagesES.format_financing_plan(plan.model_dump()) for plan in plans]
             )
 
             reply = (
