@@ -34,4 +34,3 @@ async def chat(request: ChatRequest) -> ChatResponse:
         Chat response with reply, next_action, suggested_questions, and optional debug info
     """
     return await _handle_chat_turn_use_case.execute(request)
-

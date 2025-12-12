@@ -41,7 +41,7 @@ class ChatResponse(DTO):
         json_schema_extra = {
             "example": {
                 "session_id": "session_123",
-                "reply": "¡Excelente! Entiendo que buscas un auto family. ¿Cuál es tu rango de presupuesto? Puedes decirme un monto específico o un rango.",
+                "reply": "¡Excelente! Entiendo que buscas un auto family. ¿Cuál es tu rango de presupuesto? Puedes decirme un monto específico o un rango.",  # noqa: E501
                 "next_action": "ask_budget",
                 "suggested_questions": [
                     "Mi presupuesto es alrededor de $200,000",
@@ -51,4 +51,3 @@ class ChatResponse(DTO):
                 "debug": {"current_step": "budget", "need": "family", "budget": None},
             }
         }
-

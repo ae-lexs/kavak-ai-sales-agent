@@ -1,2 +1,1 @@
 """LLM/RAG outbound adapter."""
-

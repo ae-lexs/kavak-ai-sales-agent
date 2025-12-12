@@ -10,7 +10,6 @@ from app.application.ports.conversation_state_repository import ConversationStat
 from app.application.use_cases.calculate_financing_plan import CalculateFinancingPlan
 from app.application.use_cases.user_messages_es import UserMessagesES
 from app.domain.entities.conversation_state import ConversationState
-from app.domain.value_objects.loan_term_months import LoanTermMonths
 from app.domain.value_objects.money_mxn import MoneyMXN
 
 
@@ -62,7 +61,7 @@ class HandleChatTurnUseCase:
 
         # Determine next action and generate response
         reply, next_action, suggested_questions = self._generate_response(state, cars)
-        
+
         # Update last_question with the reply
         state.last_question = reply
 
@@ -138,7 +137,16 @@ class HandleChatTurnUseCase:
             # Look for budget keywords in Spanish
             elif any(
                 word in message_lower
-                for word in ["presupuesto", "precio", "costo", "presupuest", "dinero", "budget", "price", "cost"]
+                for word in [
+                    "presupuesto",
+                    "precio",
+                    "costo",
+                    "presupuest",
+                    "dinero",
+                    "budget",
+                    "price",
+                    "cost",
+                ]
             ):
                 # User mentioned budget but didn't specify amount - will ask in response
                 pass
@@ -186,7 +194,19 @@ class HandleChatTurnUseCase:
                 "monthly payment",
             ]
             if any(word in message_lower for word in financing_keywords):
-                positive_keywords = ["sí", "si", "sí", "interesado", "interesada", "quiero", "necesito", "yes", "interested", "want", "need"]
+                positive_keywords = [
+                    "sí",
+                    "si",
+                    "sí",
+                    "interesado",
+                    "interesada",
+                    "quiero",
+                    "necesito",
+                    "yes",
+                    "interested",
+                    "want",
+                    "need",
+                ]
                 negative_keywords = ["no", "contado", "efectivo", "cash", "pay"]
                 if any(word in message_lower for word in positive_keywords):
                     state.financing_interest = True
@@ -251,7 +271,7 @@ class HandleChatTurnUseCase:
             Dictionary of search filters
         """
         filters: dict[str, Any] = {}
-        
+
         if state.need:
             filters["need"] = state.need
         if state.budget:
@@ -261,7 +281,7 @@ class HandleChatTurnUseCase:
                 filters["max_price"] = float(budget_match.group(1))
         if state.preferences:
             filters["preferences"] = state.preferences
-            
+
         return filters
 
     def _generate_response(
@@ -298,15 +318,15 @@ class HandleChatTurnUseCase:
                 # Store first car price for financing calculations
                 if not state.selected_car_price:
                     state.selected_car_price = cars[0].price_mxn
-                
+
                 car_list = "\n".join(
                     [
-                        f"- {car.make} {car.model} {car.year}: ${car.price_mxn:,.0f} MXN ({car.mileage_km:,} km)"
+                        f"- {car.make} {car.model} {car.year}: ${car.price_mxn:,.0f} MXN ({car.mileage_km:,} km)"  # noqa: E501
                         for car in cars[:3]
                     ]
                 )
                 reply = (
-                    f"¡Perfecto! Basándome en tus preferencias, aquí tienes algunas opciones:\n\n{car_list}\n\n"
+                    f"¡Perfecto! Basándome en tus preferencias, aquí tienes algunas opciones:\n\n{car_list}\n\n"  # noqa: E501
                     "¿Te gustaría explorar opciones de financiamiento para alguno de estos autos?"
                 )
                 return (
@@ -411,7 +431,7 @@ class HandleChatTurnUseCase:
 
             # Format plans
             plans_text = "\n\n".join(
-                [UserMessagesES.format_financing_plan(plan.dict()) for plan in plans]
+                [UserMessagesES.format_financing_plan(plan.model_dump()) for plan in plans]
             )
 
             reply = (
@@ -435,4 +455,3 @@ class HandleChatTurnUseCase:
                 "ask_down_payment",
                 UserMessagesES.SUGGESTED_DOWN_PAYMENT,
             )
-

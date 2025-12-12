@@ -10,4 +10,3 @@ class DTO(BaseModel):
         """Pydantic configuration."""
 
         frozen = True
-

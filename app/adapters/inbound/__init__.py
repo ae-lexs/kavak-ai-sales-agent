@@ -1,2 +1,1 @@
 """Inbound adapters (primary adapters)."""
-

@@ -38,4 +38,3 @@ async def test_chat_use_case_execute():
     assert response.reply == "Mock response"
     assert response.next_action == "mock_action"
     assert len(response.suggested_questions) == 2
-

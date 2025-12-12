@@ -47,4 +47,3 @@ class MoneyMXN:
     def __ge__(self, other: "MoneyMXN") -> bool:
         """Compare greater than or equal."""
         return self.amount >= other.amount
-

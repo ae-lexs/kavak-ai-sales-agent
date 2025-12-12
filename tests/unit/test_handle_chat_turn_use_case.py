@@ -173,24 +173,32 @@ async def test_handle_chat_turn_all_steps():
     )
     # Cars are found, so it goes directly to financing
     assert response2.next_action == "ask_financing"
-    
+
     # Step 3: Set preferences first (since it's still missing)
     response3 = await use_case.execute(
         ChatRequest(session_id=session_id, message="Automática", channel="api")
     )
     assert response3.next_action == "ask_financing"
-    
-    # Step 4: Financing
-    response4 = await use_case.execute(
-        ChatRequest(session_id=session_id, message="Sí, me interesa financiamiento", channel="api")
-    )
-    assert response4.next_action == "complete" or response4.next_action == "ask_financing"
 
-    # Step 4: Financing
+    # Step 4: Financing interest
     response4 = await use_case.execute(
         ChatRequest(session_id=session_id, message="Sí, me interesa financiamiento", channel="api")
     )
-    assert response4.next_action == "complete" or response4.next_action == "ask_financing"
+    # After showing financing interest, it should ask for down payment
+    assert response4.next_action == "ask_down_payment"
+
+    # Step 5: Down payment
+    response5 = await use_case.execute(
+        ChatRequest(session_id=session_id, message="10% de enganche", channel="api")
+    )
+    assert response5.next_action == "ask_loan_term"
+
+    # Step 6: Loan term
+    response6 = await use_case.execute(
+        ChatRequest(session_id=session_id, message="48 meses", channel="api")
+    )
+    # After providing term, should show financing plans and complete
+    assert response6.next_action == "complete"
 
 
 @pytest.mark.asyncio

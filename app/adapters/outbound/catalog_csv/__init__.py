@@ -1,2 +1,1 @@
 """Catalog CSV outbound adapter."""
-

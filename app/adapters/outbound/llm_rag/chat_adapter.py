@@ -35,4 +35,3 @@ class LLMRAGChatAdapter(ChatPort):
             Chat response DTO
         """
         return await self._use_case.execute(request)
-

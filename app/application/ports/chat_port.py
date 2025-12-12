@@ -20,4 +20,3 @@ class ChatPort(ABC):
             Chat response DTO
         """
         pass
-

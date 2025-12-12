@@ -1,0 +1,17 @@
+# Development dependencies for Kavak AI Sales Agent
+
+# Include production dependencies
+-r requirements.txt
+
+# Testing framework
+pytest>=7.4.0,<8.0.0
+pytest-asyncio>=0.21.0,<1.0.0
+
+# Code quality
+ruff>=0.1.0,<1.0.0
+
+# Code quality (optional but recommended)
+# black>=23.0.0,<24.0.0
+# flake8>=6.1.0,<7.0.0
+# mypy>=1.7.0,<2.0.0
+

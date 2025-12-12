@@ -66,9 +66,7 @@ class TestCalculateFinancingPlan:
         assert plan.financed_amount == 315000.0
         assert plan.monthly_payment > 0
         # Longer term should have lower monthly payment but higher total interest
-        plan_36 = self.calculator.calculate(
-            self.car_price, down_payment, LoanTermMonths(months=36)
-        )
+        plan_36 = self.calculator.calculate(self.car_price, down_payment, LoanTermMonths(months=36))
         assert plan.monthly_payment < plan_36.monthly_payment
         assert plan.total_interest > plan_36.total_interest
 
@@ -114,9 +112,7 @@ class TestCalculateFinancingPlan:
         assert plan.financed_amount == 175000.0
         assert plan.monthly_payment > 0
         # Higher down payment should result in lower monthly payment
-        plan_10pct = self.calculator.calculate(
-            self.car_price, MoneyMXN(35000.0), term
-        )
+        plan_10pct = self.calculator.calculate(self.car_price, MoneyMXN(35000.0), term)
         assert plan.monthly_payment < plan_10pct.monthly_payment
 
     def test_calculate_multiple_plans(self) -> None:
@@ -145,7 +141,9 @@ class TestCalculateFinancingPlan:
         down_payment = MoneyMXN(35000.0)
 
         plans = self.calculator.calculate_multiple_plans(
-            self.car_price, down_payment, terms=[36, 24, 48]  # 24 is invalid
+            self.car_price,
+            down_payment,
+            terms=[36, 24, 48],  # 24 is invalid
         )
 
         # Should only return valid terms (36, 48)
@@ -181,4 +179,3 @@ class TestCalculateFinancingPlan:
             assert plan.financed_amount == car_price_amount * (1 - down_payment_pct)
             assert plan.monthly_payment > 0
             assert plan.total_interest > 0
-

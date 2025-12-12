@@ -1,8 +1,5 @@
 """Calculate financing plan use case."""
 
-import math
-from typing import Optional
-
 from app.application.dtos.financing import FinancingPlan
 from app.domain.value_objects.apr import APR
 from app.domain.value_objects.loan_term_months import LoanTermMonths
@@ -115,4 +112,3 @@ class CalculateFinancingPlan:
                 continue
 
         return plans
-

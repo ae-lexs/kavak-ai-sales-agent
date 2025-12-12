@@ -24,4 +24,3 @@ class FinancingPlan(DTO):
                 "total_interest": 68304.0,
             }
         }
-

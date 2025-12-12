@@ -27,4 +27,3 @@ class ChatUseCase:
             Chat response DTO
         """
         return await self._chat_port.handle_chat(request)
-

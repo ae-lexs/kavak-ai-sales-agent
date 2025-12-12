@@ -1,2 +1,1 @@
 """Outbound adapters (secondary adapters)."""
-
