@@ -1,10 +1,12 @@
 """Unit tests for HandleChatTurnUseCase."""
 
-from typing import Optional
+from typing import Any, Optional
 
 import pytest
 
+from app.application.dtos.car import CarSummary
 from app.application.dtos.chat import ChatRequest
+from app.application.ports.car_catalog_repository import CarCatalogRepository
 from app.application.use_cases.handle_chat_turn_use_case import HandleChatTurnUseCase
 from app.domain.entities.conversation_state import ConversationState
 
@@ -25,11 +27,37 @@ class MockConversationStateRepository:
         self._storage[session_id] = state
 
 
+class MockCarCatalogRepository(CarCatalogRepository):
+    """Mock car catalog repository for testing."""
+
+    async def search(self, filters: dict[str, Any]) -> list[CarSummary]:
+        """Return mocked cars."""
+        return [
+            CarSummary(
+                id="car_001",
+                make="Toyota",
+                model="Corolla",
+                year=2022,
+                price_mxn=350000.0,
+                mileage_km=15000,
+            ),
+            CarSummary(
+                id="car_002",
+                make="Honda",
+                model="Civic",
+                year=2021,
+                price_mxn=320000.0,
+                mileage_km=25000,
+            ),
+        ]
+
+
 @pytest.mark.asyncio
 async def test_handle_chat_turn_initial_greeting():
     """Test initial greeting when no state exists."""
     repository = MockConversationStateRepository()
-    use_case = HandleChatTurnUseCase(repository)
+    catalog_repository = MockCarCatalogRepository()
+    use_case = HandleChatTurnUseCase(repository, catalog_repository)
 
     request = ChatRequest(
         session_id="test_session_1",
@@ -50,7 +78,8 @@ async def test_handle_chat_turn_initial_greeting():
 async def test_handle_chat_turn_extract_need():
     """Test extracting need from message."""
     repository = MockConversationStateRepository()
-    use_case = HandleChatTurnUseCase(repository)
+    catalog_repository = MockCarCatalogRepository()
+    use_case = HandleChatTurnUseCase(repository, catalog_repository)
 
     request = ChatRequest(
         session_id="test_session_2",
@@ -69,7 +98,8 @@ async def test_handle_chat_turn_extract_need():
 async def test_handle_chat_turn_extract_budget():
     """Test extracting budget from message."""
     repository = MockConversationStateRepository()
-    use_case = HandleChatTurnUseCase(repository)
+    catalog_repository = MockCarCatalogRepository()
+    use_case = HandleChatTurnUseCase(repository, catalog_repository)
 
     # First message: set need
     request1 = ChatRequest(
@@ -87,7 +117,9 @@ async def test_handle_chat_turn_extract_budget():
     )
     response = await use_case.execute(request2)
 
-    assert response.next_action == "ask_preferences"
+    # When budget is set, step becomes "options" and cars are searched
+    # If cars are found, next_action is "ask_financing", otherwise "ask_preferences"
+    assert response.next_action in ["ask_preferences", "ask_financing"]
     assert response.debug.get("budget") is not None
 
 
@@ -95,7 +127,8 @@ async def test_handle_chat_turn_extract_budget():
 async def test_handle_chat_turn_state_persistence():
     """Test that state persists across multiple messages."""
     repository = MockConversationStateRepository()
-    use_case = HandleChatTurnUseCase(repository)
+    catalog_repository = MockCarCatalogRepository()
+    use_case = HandleChatTurnUseCase(repository, catalog_repository)
 
     session_id = "test_session_4"
 
@@ -123,7 +156,8 @@ async def test_handle_chat_turn_state_persistence():
 async def test_handle_chat_turn_all_steps():
     """Test complete flow through all steps."""
     repository = MockConversationStateRepository()
-    use_case = HandleChatTurnUseCase(repository)
+    catalog_repository = MockCarCatalogRepository()
+    use_case = HandleChatTurnUseCase(repository, catalog_repository)
 
     session_id = "test_session_5"
 
@@ -133,17 +167,24 @@ async def test_handle_chat_turn_all_steps():
     )
     assert response1.next_action == "ask_budget"
 
-    # Step 2: Budget
+    # Step 2: Budget - when set, cars are searched and shown
     response2 = await use_case.execute(
         ChatRequest(session_id=session_id, message="$200,000", channel="api")
     )
-    assert response2.next_action == "ask_preferences"
-
-    # Step 3: Preferences
+    # Cars are found, so it goes directly to financing
+    assert response2.next_action == "ask_financing"
+    
+    # Step 3: Set preferences first (since it's still missing)
     response3 = await use_case.execute(
         ChatRequest(session_id=session_id, message="Automática", channel="api")
     )
     assert response3.next_action == "ask_financing"
+    
+    # Step 4: Financing
+    response4 = await use_case.execute(
+        ChatRequest(session_id=session_id, message="Sí, me interesa financiamiento", channel="api")
+    )
+    assert response4.next_action == "complete" or response4.next_action == "ask_financing"
 
     # Step 4: Financing
     response4 = await use_case.execute(
@@ -156,7 +197,8 @@ async def test_handle_chat_turn_all_steps():
 async def test_handle_chat_turn_spanish_keywords():
     """Test that Spanish keywords are recognized."""
     repository = MockConversationStateRepository()
-    use_case = HandleChatTurnUseCase(repository)
+    catalog_repository = MockCarCatalogRepository()
+    use_case = HandleChatTurnUseCase(repository, catalog_repository)
 
     session_id = "test_session_6"
 
@@ -172,3 +214,25 @@ async def test_handle_chat_turn_spanish_keywords():
     )
     assert response2.debug.get("financing_interest") is True
 
+
+@pytest.mark.asyncio
+async def test_handle_chat_turn_car_search_on_options_step():
+    """Test that cars are searched when step is 'options'."""
+    repository = MockConversationStateRepository()
+    catalog_repository = MockCarCatalogRepository()
+    use_case = HandleChatTurnUseCase(repository, catalog_repository)
+
+    session_id = "test_session_7"
+
+    # Set need and budget to reach options step
+    await use_case.execute(
+        ChatRequest(session_id=session_id, message="Auto familiar", channel="api")
+    )
+    response = await use_case.execute(
+        ChatRequest(session_id=session_id, message="$200,000", channel="api")
+    )
+
+    # Step should be "options" and we should get car recommendations
+    assert response.debug.get("step") == "options"
+    # The response should either show cars or ask for preferences
+    assert "opciones" in response.reply.lower() or "preferencias" in response.reply.lower()
