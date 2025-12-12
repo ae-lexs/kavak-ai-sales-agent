@@ -21,7 +21,9 @@ class CSVCarCatalogRepository(CarCatalogRepository):
         """
         if csv_path is None:
             # Default to data/catalog.csv relative to project root
-            project_root = Path(__file__).parent.parent.parent.parent
+            # From app/adapters/outbound/catalog/csv_car_catalog_repository.py
+            # Go up 5 levels to reach project root
+            project_root = Path(__file__).parent.parent.parent.parent.parent
             csv_path = str(project_root / "data" / "catalog.csv")
         self._csv_path = csv_path
         self._cars: list[CarSummary] = []
