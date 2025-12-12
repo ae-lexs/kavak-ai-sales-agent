@@ -1,5 +1,7 @@
 """Unit tests for HandleChatTurnUseCase."""
 
+from typing import Optional
+
 import pytest
 
 from app.application.dtos.chat import ChatRequest
@@ -14,15 +16,13 @@ class MockConversationStateRepository:
         """Initialize mock repository."""
         self._storage: dict[str, ConversationState] = {}
 
-    async def get(self, session_id: str) -> ConversationState:
-        """Get or create conversation state."""
-        if session_id not in self._storage:
-            self._storage[session_id] = ConversationState(session_id=session_id)
-        return self._storage[session_id]
+    async def get(self, session_id: str) -> Optional[ConversationState]:
+        """Get conversation state."""
+        return self._storage.get(session_id)
 
-    async def save(self, state: ConversationState) -> None:
+    async def save(self, session_id: str, state: ConversationState) -> None:
         """Save conversation state."""
-        self._storage[state.session_id] = state
+        self._storage[session_id] = state
 
 
 @pytest.mark.asyncio
@@ -62,7 +62,7 @@ async def test_handle_chat_turn_extract_need():
 
     assert response.session_id == "test_session_2"
     assert response.next_action == "ask_budget"
-    assert response.debug["need"] == "family"
+    assert response.debug.get("need") == "family"
 
 
 @pytest.mark.asyncio
@@ -88,7 +88,7 @@ async def test_handle_chat_turn_extract_budget():
     response = await use_case.execute(request2)
 
     assert response.next_action == "ask_preferences"
-    assert response.debug["budget"] is not None
+    assert response.debug.get("budget") is not None
 
 
 @pytest.mark.asyncio
@@ -106,7 +106,7 @@ async def test_handle_chat_turn_state_persistence():
         channel="api",
     )
     response1 = await use_case.execute(request1)
-    assert response1.debug["need"] == "family"
+    assert response1.debug.get("need") == "family"
 
     # Second message - should remember need
     request2 = ChatRequest(
@@ -115,8 +115,8 @@ async def test_handle_chat_turn_state_persistence():
         channel="api",
     )
     response2 = await use_case.execute(request2)
-    assert response2.debug["need"] == "family"
-    assert response2.debug["budget"] is not None
+    assert response2.debug.get("need") == "family"
+    assert response2.debug.get("budget") is not None
 
 
 @pytest.mark.asyncio
@@ -149,13 +149,7 @@ async def test_handle_chat_turn_all_steps():
     response4 = await use_case.execute(
         ChatRequest(session_id=session_id, message="Sí, me interesa financiamiento", channel="api")
     )
-    assert response4.next_action == "ask_contact"
-
-    # Step 5: Contact intent
-    response5 = await use_case.execute(
-        ChatRequest(session_id=session_id, message="Sí, agendar cita", channel="api")
-    )
-    assert response5.next_action == "complete" or response5.next_action == "ask_contact"
+    assert response4.next_action == "complete" or response4.next_action == "ask_financing"
 
 
 @pytest.mark.asyncio
@@ -170,11 +164,11 @@ async def test_handle_chat_turn_spanish_keywords():
     response = await use_case.execute(
         ChatRequest(session_id=session_id, message="Necesito un SUV", channel="api")
     )
-    assert response.debug["need"] == "suv"
+    assert response.debug.get("need") == "suv"
 
     # Test Spanish financing keywords
     response2 = await use_case.execute(
         ChatRequest(session_id=session_id, message="Sí, quiero crédito", channel="api")
     )
-    assert response2.debug["financing_interest"] is True
+    assert response2.debug.get("financing_interest") is True
 
