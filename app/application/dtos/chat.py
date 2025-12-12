@@ -19,7 +19,7 @@ class ChatRequest(DTO):
         json_schema_extra = {
             "example": {
                 "session_id": "session_123",
-                "message": "I'm looking for a family car",
+                "message": "Estoy buscando un auto familiar",
                 "channel": "api",
                 "metadata": {"user_id": "user_456", "timestamp": "2024-01-15T10:30:00Z"},
             }
@@ -41,14 +41,14 @@ class ChatResponse(DTO):
         json_schema_extra = {
             "example": {
                 "session_id": "session_123",
-                "reply": "Great! I'd be happy to help you find the perfect family car. What's your budget range?",
+                "reply": "¡Excelente! Entiendo que buscas un auto family. ¿Cuál es tu rango de presupuesto? Puedes decirme un monto específico o un rango.",
                 "next_action": "ask_budget",
                 "suggested_questions": [
-                    "What's your budget?",
-                    "Do you prefer SUVs or sedans?",
-                    "How many seats do you need?",
+                    "Mi presupuesto es alrededor de $200,000",
+                    "Estoy buscando algo menor a $150,000",
+                    "Puedo gastar hasta $300,000",
                 ],
-                "debug": {"step": "need", "confidence": 0.95},
+                "debug": {"current_step": "budget", "need": "family", "budget": None},
             }
         }
 

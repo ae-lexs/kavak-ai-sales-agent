@@ -2,10 +2,19 @@
 
 from app.application.dtos.chat import ChatRequest, ChatResponse
 from app.application.ports.chat_port import ChatPort
+from app.application.use_cases.handle_chat_turn_use_case import HandleChatTurnUseCase
+from app.adapters.outbound.persistence.conversation_state_repository import (
+    InMemoryConversationStateRepository,
+)
 
 
 class LLMRAGChatAdapter(ChatPort):
     """LLM/RAG-based chat adapter implementation."""
+
+    def __init__(self) -> None:
+        """Initialize chat adapter with use case and dependencies."""
+        state_repository = InMemoryConversationStateRepository()
+        self._use_case = HandleChatTurnUseCase(state_repository)
 
     async def handle_chat(self, request: ChatRequest) -> ChatResponse:
         """
@@ -17,13 +26,5 @@ class LLMRAGChatAdapter(ChatPort):
         Returns:
             Chat response DTO
         """
-        # TODO: Implement actual LLM/RAG logic
-        # This is a placeholder implementation
-        return ChatResponse(
-            session_id=request.session_id,
-            reply="This is a placeholder response. LLM/RAG integration pending.",
-            next_action="pending",
-            suggested_questions=[],
-            debug={"adapter": "llm_rag", "status": "placeholder"},
-        )
+        return await self._use_case.execute(request)
 
