@@ -1,6 +1,6 @@
 """Conversation state entity."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 
@@ -11,10 +11,10 @@ class ConversationState:
     session_id: str
     need: Optional[str] = None
     budget: Optional[str] = None
-    preferences: Optional[str] = None
+    preferences: Optional[str] = None  # make/model
     financing_interest: Optional[bool] = None
-    contact_intent: Optional[bool] = None
-    current_step: str = "need"  # need -> budget -> options -> financing -> next_action
+    last_question: Optional[str] = None
+    step: str = "need"  # need -> budget -> options -> financing -> next_action
 
     def is_complete(self) -> bool:
         """
@@ -29,7 +29,6 @@ class ConversationState:
                 self.budget is not None,
                 self.preferences is not None,
                 self.financing_interest is not None,
-                self.contact_intent is not None,
             ]
         )
 
@@ -48,7 +47,5 @@ class ConversationState:
             return "preferences"
         if self.financing_interest is None:
             return "financing_interest"
-        if self.contact_intent is None:
-            return "contact_intent"
         return None
 
