@@ -7,8 +7,11 @@ from app.application.dtos.car import CarSummary
 from app.application.dtos.chat import ChatRequest, ChatResponse
 from app.application.ports.car_catalog_repository import CarCatalogRepository
 from app.application.ports.conversation_state_repository import ConversationStateRepository
+from app.application.use_cases.calculate_financing_plan import CalculateFinancingPlan
 from app.application.use_cases.user_messages_es import UserMessagesES
 from app.domain.entities.conversation_state import ConversationState
+from app.domain.value_objects.loan_term_months import LoanTermMonths
+from app.domain.value_objects.money_mxn import MoneyMXN
 
 
 class HandleChatTurnUseCase:
@@ -28,6 +31,7 @@ class HandleChatTurnUseCase:
         """
         self._state_repository = state_repository
         self._car_catalog_repository = car_catalog_repository
+        self._financing_calculator = CalculateFinancingPlan()
 
     async def execute(self, request: ChatRequest) -> ChatResponse:
         """
@@ -52,6 +56,9 @@ class HandleChatTurnUseCase:
         if state.step == "options":
             filters = self._build_search_filters(state)
             cars = await self._car_catalog_repository.search(filters)
+            # Store first car price for financing calculations
+            if cars and len(cars) > 0 and not state.selected_car_price:
+                state.selected_car_price = cars[0].price_mxn
 
         # Determine next action and generate response
         reply, next_action, suggested_questions = self._generate_response(state, cars)
@@ -73,6 +80,9 @@ class HandleChatTurnUseCase:
                 "budget": state.budget,
                 "preferences": state.preferences,
                 "financing_interest": state.financing_interest,
+                "down_payment": state.down_payment,
+                "loan_term": state.loan_term,
+                "selected_car_price": state.selected_car_price,
                 "last_question": state.last_question,
             },
         )
@@ -185,6 +195,32 @@ class HandleChatTurnUseCase:
                     state.financing_interest = False
                     state.step = "next_action"
 
+        # Extract down payment - handle both amount and percentage
+        if state.financing_interest and state.down_payment is None and state.selected_car_price:
+            # Look for percentage (e.g., "10%", "20 por ciento")
+            percent_pattern = r"(\d+)\s*%|(\d+)\s*por\s*ciento"
+            percent_match = re.search(percent_pattern, message_lower)
+            if percent_match:
+                percent = float(percent_match.group(1) or percent_match.group(2))
+                if 10 <= percent <= 100:
+                    state.down_payment = f"{percent}%"
+            else:
+                # Look for amount (numbers with $ or pesos)
+                amount_pattern = r"[\$]?\s*(\d{1,3}(?:[,\s]\d{3})*(?:\.\d{2})?)"
+                amounts = re.findall(amount_pattern, message)
+                if amounts:
+                    # Take the first amount found
+                    state.down_payment = amounts[0]
+
+        # Extract loan term
+        if state.financing_interest and state.loan_term is None:
+            term_pattern = r"(\d+)\s*(?:meses|mes|month|months)"
+            term_match = re.search(term_pattern, message_lower)
+            if term_match:
+                term = int(term_match.group(1))
+                if term in [36, 48, 60, 72]:
+                    state.loan_term = term
+
         # Update step to next_action if user mentions scheduling/contact
         contact_keywords = [
             "agendar",
@@ -259,6 +295,10 @@ class HandleChatTurnUseCase:
         elif missing_field == "preferences":
             # If we have cars, show them; otherwise ask for preferences
             if cars and len(cars) > 0:
+                # Store first car price for financing calculations
+                if not state.selected_car_price:
+                    state.selected_car_price = cars[0].price_mxn
+                
                 car_list = "\n".join(
                     [
                         f"- {car.make} {car.model} {car.year}: ${car.price_mxn:,.0f} MXN ({car.mileage_km:,} km)"
@@ -292,11 +332,107 @@ class HandleChatTurnUseCase:
                 UserMessagesES.SUGGESTED_FINANCING,
             )
 
+        # Handle financing flow: down payment -> loan term -> show plans
+        elif state.financing_interest and state.selected_car_price:
+            if state.down_payment is None:
+                return (
+                    UserMessagesES.ask_down_payment(state.selected_car_price),
+                    "ask_down_payment",
+                    UserMessagesES.SUGGESTED_DOWN_PAYMENT,
+                )
+            elif state.loan_term is None:
+                return (
+                    UserMessagesES.ASK_LOAN_TERM,
+                    "ask_loan_term",
+                    UserMessagesES.SUGGESTED_LOAN_TERM,
+                )
+            else:
+                # Calculate and show financing plans
+                return self._generate_financing_plans_response(state)
+
         else:
             # All fields collected
             return (
                 UserMessagesES.COMPLETE,
                 "complete",
                 UserMessagesES.SUGGESTED_COMPLETE,
+            )
+
+    def _generate_financing_plans_response(
+        self, state: ConversationState
+    ) -> tuple[str, str, list[str]]:
+        """
+        Generate financing plans response.
+
+        Args:
+            state: Current conversation state
+
+        Returns:
+            Tuple of (reply, next_action, suggested_questions)
+        """
+        if not state.selected_car_price or not state.down_payment:
+            return (
+                "Necesito más información para calcular el financiamiento.",
+                "ask_down_payment",
+                UserMessagesES.SUGGESTED_DOWN_PAYMENT,
+            )
+
+        # Parse down payment
+        car_price = MoneyMXN(state.selected_car_price)
+        down_payment_amount: MoneyMXN
+
+        if "%" in state.down_payment:
+            # Percentage
+            percent = float(state.down_payment.replace("%", "").strip())
+            down_payment_amount = car_price * (percent / 100)
+        else:
+            # Amount
+            amount_str = state.down_payment.replace(",", "").replace("$", "").strip()
+            down_payment_amount = MoneyMXN(float(amount_str))
+
+        # Calculate plans for 36, 48, 60 months (or use selected term if provided)
+        if state.loan_term:
+            terms = [state.loan_term]
+        else:
+            terms = [36, 48, 60]
+
+        try:
+            plans = self._financing_calculator.calculate_multiple_plans(
+                car_price, down_payment_amount, terms
+            )
+
+            if not plans:
+                return (
+                    "Lo siento, no pude calcular los planes de financiamiento. "
+                    "Por favor, verifica el enganche (mínimo 10%).",
+                    "ask_down_payment",
+                    UserMessagesES.SUGGESTED_DOWN_PAYMENT,
+                )
+
+            # Format plans
+            plans_text = "\n\n".join(
+                [UserMessagesES.format_financing_plan(plan.dict()) for plan in plans]
+            )
+
+            reply = (
+                f"¡Perfecto! Aquí están tus opciones de financiamiento "
+                f"(tasa de interés: 10% anual):\n\n{plans_text}\n\n"
+                "¿Te gustaría agendar una cita para continuar con el proceso?"
+            )
+
+            return (
+                reply,
+                "complete",
+                [
+                    "Sí, agendar cita",
+                    "Tengo más preguntas",
+                    "Ver más opciones",
+                ],
+            )
+        except ValueError as e:
+            return (
+                f"Lo siento, {str(e)}. Por favor, proporciona un enganche válido.",
+                "ask_down_payment",
+                UserMessagesES.SUGGESTED_DOWN_PAYMENT,
             )
 
