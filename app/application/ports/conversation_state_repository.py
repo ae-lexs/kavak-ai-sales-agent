@@ -32,3 +32,13 @@ class ConversationStateRepository(ABC):
             state: Conversation state entity to save
         """
         pass
+
+    @abstractmethod
+    async def delete(self, session_id: str) -> None:
+        """
+        Delete conversation state for a session.
+
+        Args:
+            session_id: Session identifier
+        """
+        pass

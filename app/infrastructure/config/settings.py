@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     """Application configuration settings."""
 
     debug_mode: bool = False
+    state_ttl_seconds: int = 86400  # 24 hours default
 
     model_config = SettingsConfigDict(
         env_file=".env",

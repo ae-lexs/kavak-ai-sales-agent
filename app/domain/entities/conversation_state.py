@@ -1,6 +1,7 @@
 """Conversation state entity."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -18,6 +19,12 @@ class ConversationState:
     selected_car_price: Optional[float] = None  # Price of selected car for financing
     last_question: Optional[str] = None
     step: str = "need"  # need -> budget -> options -> financing -> next_action
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    def touch(self) -> None:
+        """Update the updated_at timestamp."""
+        self.updated_at = datetime.now(timezone.utc)
 
     def is_complete(self) -> bool:
         """
