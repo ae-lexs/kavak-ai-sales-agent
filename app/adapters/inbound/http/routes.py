@@ -3,9 +3,12 @@
 from fastapi import APIRouter, status
 
 from app.application.dtos.chat import ChatRequest, ChatResponse
-from app.infrastructure.wiring.container import container
+from app.infrastructure.wiring.dependencies import create_handle_chat_turn_use_case
 
 router = APIRouter()
+
+# Create use case instance (wired with dependencies)
+_handle_chat_turn_use_case = create_handle_chat_turn_use_case()
 
 
 @router.get("/health", status_code=status.HTTP_200_OK)
@@ -30,5 +33,5 @@ async def chat(request: ChatRequest) -> ChatResponse:
     Returns:
         Chat response with reply, next_action, suggested_questions, and optional debug info
     """
-    return await container.chat_use_case.execute(request)
+    return await _handle_chat_turn_use_case.execute(request)
 
