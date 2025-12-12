@@ -1,0 +1,2 @@
+"""Catalog CSV adapter implementation."""
+
