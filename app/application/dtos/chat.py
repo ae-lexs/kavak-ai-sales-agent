@@ -2,6 +2,8 @@
 
 from typing import Any, Optional
 
+from pydantic import ConfigDict
+
 from app.application.dtos.base import DTO
 
 
@@ -13,10 +15,8 @@ class ChatRequest(DTO):
     channel: str = "api"
     metadata: Optional[dict[str, Any]] = None
 
-    class Config:
-        """Pydantic configuration."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "session_id": "session_123",
                 "message": "Estoy buscando un auto familiar",
@@ -24,6 +24,7 @@ class ChatRequest(DTO):
                 "metadata": {"user_id": "user_456", "timestamp": "2024-01-15T10:30:00Z"},
             }
         }
+    )
 
 
 class ChatResponse(DTO):
@@ -35,10 +36,8 @@ class ChatResponse(DTO):
     suggested_questions: list[str]
     debug: Optional[dict[str, Any]] = None
 
-    class Config:
-        """Pydantic configuration."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "session_id": "session_123",
                 "reply": "¡Excelente! Entiendo que buscas un auto family. ¿Cuál es tu rango de presupuesto? Puedes decirme un monto específico o un rango.",  # noqa: E501
@@ -51,3 +50,4 @@ class ChatResponse(DTO):
                 "debug": {"current_step": "budget", "need": "family", "budget": None},
             }
         }
+    )

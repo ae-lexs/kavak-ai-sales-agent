@@ -1,5 +1,7 @@
 """Car DTOs."""
 
+from pydantic import ConfigDict
+
 from app.application.dtos.base import DTO
 
 
@@ -13,10 +15,8 @@ class CarSummary(DTO):
     price_mxn: float
     mileage_km: int
 
-    class Config:
-        """Pydantic configuration."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "car_001",
                 "make": "Toyota",
@@ -26,3 +26,4 @@ class CarSummary(DTO):
                 "mileage_km": 15000,
             }
         }
+    )
