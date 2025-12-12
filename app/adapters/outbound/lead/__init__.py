@@ -1,0 +1,1 @@
+"""Lead repository adapters."""

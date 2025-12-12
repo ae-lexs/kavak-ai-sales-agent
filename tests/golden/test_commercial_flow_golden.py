@@ -64,7 +64,9 @@ def use_case():
     """Create use case with mock dependencies."""
     state_repo = InMemoryStateRepository()
     car_repo = MockCarCatalogRepository()
-    return HandleChatTurnUseCase(state_repo, car_repo, faq_rag_service=None, logger=None)
+    return HandleChatTurnUseCase(
+        state_repo, car_repo, lead_repository=None, faq_rag_service=None, logger=None
+    )
 
 
 @pytest.mark.asyncio
@@ -181,7 +183,9 @@ async def test_golden_faq_intent_routing_with_rag():
     car_repo = MockCarCatalogRepository()
     knowledge_repo = LocalMarkdownKnowledgeBaseRepository()
     faq_service = AnswerFaqWithRag(knowledge_repo)
-    use_case = HandleChatTurnUseCase(state_repo, car_repo, faq_service, logger=None)
+    use_case = HandleChatTurnUseCase(
+        state_repo, car_repo, lead_repository=None, faq_rag_service=faq_service, logger=None
+    )
 
     session_id = "golden_faq_rag_test_session"
 

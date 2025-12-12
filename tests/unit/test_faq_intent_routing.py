@@ -64,7 +64,9 @@ async def test_faq_intent_routes_to_rag():
     state_repo = MockConversationStateRepository()
     car_repo = MockCarCatalogRepository()
     faq_service = MockFaqRagService()
-    use_case = HandleChatTurnUseCase(state_repo, car_repo, faq_service)
+    use_case = HandleChatTurnUseCase(
+        state_repo, car_repo, lead_repository=None, faq_rag_service=faq_service
+    )
 
     request = ChatRequest(
         session_id="test_session",
@@ -89,7 +91,9 @@ async def test_faq_intent_with_garantia_keyword():
     state_repo = MockConversationStateRepository()
     car_repo = MockCarCatalogRepository()
     faq_service = MockFaqRagService()
-    use_case = HandleChatTurnUseCase(state_repo, car_repo, faq_service)
+    use_case = HandleChatTurnUseCase(
+        state_repo, car_repo, lead_repository=None, faq_rag_service=faq_service
+    )
 
     request = ChatRequest(
         session_id="test_session",
@@ -109,7 +113,9 @@ async def test_faq_intent_with_devolucion_keyword():
     state_repo = MockConversationStateRepository()
     car_repo = MockCarCatalogRepository()
     faq_service = MockFaqRagService()
-    use_case = HandleChatTurnUseCase(state_repo, car_repo, faq_service)
+    use_case = HandleChatTurnUseCase(
+        state_repo, car_repo, lead_repository=None, faq_rag_service=faq_service
+    )
 
     request = ChatRequest(
         session_id="test_session",
@@ -129,7 +135,9 @@ async def test_faq_intent_with_inspeccion_keyword():
     state_repo = MockConversationStateRepository()
     car_repo = MockCarCatalogRepository()
     faq_service = MockFaqRagService()
-    use_case = HandleChatTurnUseCase(state_repo, car_repo, faq_service)
+    use_case = HandleChatTurnUseCase(
+        state_repo, car_repo, lead_repository=None, faq_rag_service=faq_service
+    )
 
     request = ChatRequest(
         session_id="test_session",
@@ -149,7 +157,9 @@ async def test_non_faq_stays_in_commercial_flow():
     state_repo = MockConversationStateRepository()
     car_repo = MockCarCatalogRepository()
     faq_service = MockFaqRagService()
-    use_case = HandleChatTurnUseCase(state_repo, car_repo, faq_service)
+    use_case = HandleChatTurnUseCase(
+        state_repo, car_repo, lead_repository=None, faq_rag_service=faq_service
+    )
 
     request = ChatRequest(
         session_id="test_session",
@@ -181,7 +191,9 @@ async def test_faq_intent_with_kavak_keyword():
     state_repo = MockConversationStateRepository()
     car_repo = MockCarCatalogRepository()
     faq_service = MockFaqRagService()
-    use_case = HandleChatTurnUseCase(state_repo, car_repo, faq_service)
+    use_case = HandleChatTurnUseCase(
+        state_repo, car_repo, lead_repository=None, faq_rag_service=faq_service
+    )
 
     request = ChatRequest(
         session_id="test_session",
@@ -201,7 +213,9 @@ async def test_faq_intent_without_service_continues_normal_flow():
     state_repo = MockConversationStateRepository()
     car_repo = MockCarCatalogRepository()
     # No FAQ service provided
-    use_case = HandleChatTurnUseCase(state_repo, car_repo, None)
+    use_case = HandleChatTurnUseCase(
+        state_repo, car_repo, lead_repository=None, faq_rag_service=None
+    )
 
     request = ChatRequest(
         session_id="test_session",

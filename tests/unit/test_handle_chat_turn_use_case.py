@@ -202,8 +202,8 @@ async def test_handle_chat_turn_all_steps():
     response6 = await use_case.execute(
         ChatRequest(session_id=session_id, message="48 meses", channel="api")
     )
-    # After providing term, should show financing plans and complete
-    assert response6.next_action == "complete"
+    # After providing term, should show financing plans and ask for contact info
+    assert response6.next_action == "ask_contact_info"
 
 
 @pytest.mark.asyncio

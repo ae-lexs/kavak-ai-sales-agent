@@ -13,3 +13,8 @@ lint:
 	python3 -m ruff format --check .
 	python3 -m ruff check .
 
+format_fix:
+	python3 -m ruff format
+
+lint_fix:
+	python3 -m ruff check --fix

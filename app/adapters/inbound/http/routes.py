@@ -10,6 +10,7 @@ from app.infrastructure.logging.logger import log_turn
 from app.infrastructure.wiring.dependencies import (
     create_conversation_state_repository,
     create_handle_chat_turn_use_case,
+    create_lead_repository,
 )
 
 router = APIRouter()
@@ -17,6 +18,7 @@ router = APIRouter()
 # Create use case instance (wired with dependencies)
 _handle_chat_turn_use_case = create_handle_chat_turn_use_case()
 _state_repository = create_conversation_state_repository()
+_lead_repository = create_lead_repository()
 
 
 @router.get("/health", status_code=status.HTTP_200_OK)
@@ -144,4 +146,38 @@ async def reset_session(session_id: str) -> dict:
         "session_id": session_id,
         "message": "Session reset successfully",
         "status": "reset",
+    }
+
+
+@router.get("/debug/leads", status_code=status.HTTP_200_OK)
+async def get_leads_debug() -> dict:
+    """
+    Get all captured leads (only enabled if DEBUG_MODE=true).
+
+    Returns:
+        List of captured leads with English keys
+
+    Raises:
+        HTTPException: 404 if DEBUG_MODE is disabled
+    """
+    if not settings.debug_mode:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Debug endpoint is disabled",
+        )
+
+    leads = await _lead_repository.list()
+
+    return {
+        "leads": [
+            {
+                "session_id": lead.session_id,
+                "name": lead.name,
+                "phone": lead.phone,
+                "preferred_contact_time": lead.preferred_contact_time,
+                "created_at": lead.created_at.isoformat(),
+            }
+            for lead in leads
+        ],
+        "count": len(leads),
     }

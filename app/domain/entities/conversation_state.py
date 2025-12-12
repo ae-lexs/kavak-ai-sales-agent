@@ -19,6 +19,10 @@ class ConversationState:
     selected_car_price: Optional[float] = None  # Price of selected car for financing
     last_question: Optional[str] = None
     step: str = "need"  # need -> budget -> options -> financing -> next_action
+    # Lead capture fields
+    lead_name: Optional[str] = None
+    lead_phone: Optional[str] = None
+    lead_preferred_contact_time: Optional[str] = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -57,4 +61,34 @@ class ConversationState:
             return "preferences"
         if self.financing_interest is None:
             return "financing_interest"
+        return None
+
+    def is_lead_complete(self) -> bool:
+        """
+        Check if all lead information is collected.
+
+        Returns:
+            True if name, phone, and preferred_contact_time are all present
+        """
+        return all(
+            [
+                self.lead_name is not None,
+                self.lead_phone is not None,
+                self.lead_preferred_contact_time is not None,
+            ]
+        )
+
+    def get_next_missing_lead_field(self) -> Optional[str]:
+        """
+        Get the next missing lead field to collect.
+
+        Returns:
+            Name of the next missing lead field, or None if all are collected
+        """
+        if self.lead_name is None:
+            return "lead_name"
+        if self.lead_phone is None:
+            return "lead_phone"
+        if self.lead_preferred_contact_time is None:
+            return "lead_preferred_contact_time"
         return None
