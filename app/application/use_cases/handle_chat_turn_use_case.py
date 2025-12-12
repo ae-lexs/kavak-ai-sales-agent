@@ -10,7 +10,6 @@ from app.application.ports.conversation_state_repository import ConversationStat
 from app.application.use_cases.calculate_financing_plan import CalculateFinancingPlan
 from app.application.use_cases.user_messages_es import UserMessagesES
 from app.domain.entities.conversation_state import ConversationState
-from app.domain.value_objects.loan_term_months import LoanTermMonths
 from app.domain.value_objects.money_mxn import MoneyMXN
 
 
@@ -322,12 +321,12 @@ class HandleChatTurnUseCase:
 
                 car_list = "\n".join(
                     [
-                        f"- {car.make} {car.model} {car.year}: ${car.price_mxn:,.0f} MXN ({car.mileage_km:,} km)"
+                        f"- {car.make} {car.model} {car.year}: ${car.price_mxn:,.0f} MXN ({car.mileage_km:,} km)"  # noqa: E501
                         for car in cars[:3]
                     ]
                 )
                 reply = (
-                    f"¡Perfecto! Basándome en tus preferencias, aquí tienes algunas opciones:\n\n{car_list}\n\n"
+                    f"¡Perfecto! Basándome en tus preferencias, aquí tienes algunas opciones:\n\n{car_list}\n\n"  # noqa: E501
                     "¿Te gustaría explorar opciones de financiamiento para alguno de estos autos?"
                 )
                 return (
