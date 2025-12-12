@@ -1,0 +1,2 @@
+"""Persistence outbound adapter."""
+

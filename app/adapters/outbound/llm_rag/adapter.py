@@ -1,0 +1,2 @@
+"""LLM/RAG adapter implementation."""
+
