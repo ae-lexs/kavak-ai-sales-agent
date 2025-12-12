@@ -1,14 +1,22 @@
 """HTTP routes."""
 
-from fastapi import APIRouter, status
+from uuid import uuid4
+
+from fastapi import APIRouter, HTTPException, status
 
 from app.application.dtos.chat import ChatRequest, ChatResponse
-from app.infrastructure.wiring.dependencies import create_handle_chat_turn_use_case
+from app.infrastructure.config.settings import settings
+from app.infrastructure.logging.logger import log_turn
+from app.infrastructure.wiring.dependencies import (
+    create_conversation_state_repository,
+    create_handle_chat_turn_use_case,
+)
 
 router = APIRouter()
 
 # Create use case instance (wired with dependencies)
 _handle_chat_turn_use_case = create_handle_chat_turn_use_case()
+_state_repository = create_conversation_state_repository()
 
 
 @router.get("/health", status_code=status.HTTP_200_OK)
@@ -33,4 +41,75 @@ async def chat(request: ChatRequest) -> ChatResponse:
     Returns:
         Chat response with reply, next_action, suggested_questions, and optional debug info
     """
-    return await _handle_chat_turn_use_case.execute(request)
+    # Generate turn_id for request correlation
+    turn_id = str(uuid4())
+
+    # Log incoming request
+    log_turn(
+        session_id=request.session_id,
+        turn_id=turn_id,
+        component="http",
+        message_length=len(request.message),
+        channel=request.channel,
+    )
+
+    # Execute use case
+    response = await _handle_chat_turn_use_case.execute(request, turn_id=turn_id)
+
+    # Add turn_id to debug if DEBUG_MODE is enabled
+    if settings.debug_mode and response.debug is not None:
+        response.debug["turn_id"] = turn_id
+
+    # Log response
+    log_turn(
+        session_id=request.session_id,
+        turn_id=turn_id,
+        component="http",
+        next_action=response.next_action,
+        reply_length=len(response.reply),
+    )
+
+    return response
+
+
+@router.get("/debug/session/{session_id}", status_code=status.HTTP_200_OK)
+async def get_session_debug(session_id: str) -> dict:
+    """
+    Get debug information for a session (only enabled if DEBUG_MODE=true).
+
+    Args:
+        session_id: Session identifier
+
+    Returns:
+        Conversation state debug information
+
+    Raises:
+        HTTPException: 404 if DEBUG_MODE is disabled
+    """
+    if not settings.debug_mode:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Debug endpoint is disabled",
+        )
+
+    # Fetch state from repository
+    state = await _state_repository.get(session_id)
+
+    if state is None:
+        return {"session_id": session_id, "state": None}
+
+    # Return state as dictionary with English keys
+    return {
+        "session_id": session_id,
+        "state": {
+            "step": state.step,
+            "need": state.need,
+            "budget": state.budget,
+            "preferences": state.preferences,
+            "financing_interest": state.financing_interest,
+            "down_payment": state.down_payment,
+            "loan_term": state.loan_term,
+            "selected_car_price": state.selected_car_price,
+            "last_question": state.last_question,
+        },
+    }
