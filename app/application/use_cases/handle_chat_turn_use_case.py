@@ -5,8 +5,10 @@ from typing import Any, Callable, Optional
 
 from app.application.dtos.car import CarSummary
 from app.application.dtos.chat import ChatRequest, ChatResponse
+from app.application.dtos.lead import Lead
 from app.application.ports.car_catalog_repository import CarCatalogRepository
 from app.application.ports.conversation_state_repository import ConversationStateRepository
+from app.application.ports.lead_repository import LeadRepository
 from app.application.use_cases.answer_faq_with_rag import AnswerFaqWithRag
 from app.application.use_cases.calculate_financing_plan import CalculateFinancingPlan
 from app.application.use_cases.user_messages_es import UserMessagesES
@@ -21,6 +23,7 @@ class HandleChatTurnUseCase:
         self,
         state_repository: ConversationStateRepository,
         car_catalog_repository: CarCatalogRepository,
+        lead_repository: Optional[LeadRepository] = None,
         faq_rag_service: Optional[AnswerFaqWithRag] = None,
         logger: Optional[Callable[[str, str, str, Any], None]] = None,
     ) -> None:
@@ -30,11 +33,13 @@ class HandleChatTurnUseCase:
         Args:
             state_repository: Repository for conversation state
             car_catalog_repository: Repository for car catalog
+            lead_repository: Optional repository for lead capture
             faq_rag_service: Optional FAQ RAG service for answering FAQ questions
             logger: Optional logger function (session_id, turn_id, component, **kwargs)
         """
         self._state_repository = state_repository
         self._car_catalog_repository = car_catalog_repository
+        self._lead_repository = lead_repository
         self._financing_calculator = CalculateFinancingPlan()
         self._faq_rag_service = faq_rag_service
         self._logger = logger
@@ -151,6 +156,25 @@ class HandleChatTurnUseCase:
         # Process message and update state
         self._process_message(request.message, state)
 
+        # Trigger lead capture if user expresses scheduling/purchase intent after completing flow
+        message_lower = request.message.lower()
+        scheduling_keywords = [
+            "sí, agendar",
+            "si, agendar",
+            "agendar cita",
+            "sí quiero",
+            "si quiero",
+            "quiero agendar",
+            "me interesa agendar",
+        ]
+        if (
+            state.is_complete()
+            and any(keyword in message_lower for keyword in scheduling_keywords)
+            and state.step != "collect_contact_info"
+            and state.step != "handoff_to_human"
+        ):
+            state.step = "collect_contact_info"
+
         # Log missing fields
         missing_field = state.get_next_missing_field()
         if missing_field:
@@ -194,6 +218,28 @@ class HandleChatTurnUseCase:
 
         # Determine next action and generate response
         reply, next_action, suggested_questions = self._generate_response(state, cars)
+
+        # Handle lead capture trigger from next_action
+        if next_action == "ask_contact_info" and state.step != "collect_contact_info":
+            state.step = "collect_contact_info"
+
+        # Save lead if complete
+        if state.is_lead_complete() and self._lead_repository and state.step == "handoff_to_human":
+            lead = Lead(
+                session_id=state.session_id,
+                name=state.lead_name,
+                phone=state.lead_phone,
+                preferred_contact_time=state.lead_preferred_contact_time,
+                created_at=state.created_at,
+            )
+            await self._lead_repository.save(lead)
+            self._log(
+                request.session_id,
+                turn_id,
+                "use_case",
+                action="lead_saved",
+                lead_complete=True,
+            )
 
         # Log financing calculation if applicable
         if state.financing_interest and state.selected_car_price and state.down_payment:
@@ -418,8 +464,94 @@ class HandleChatTurnUseCase:
             "call",
             "meet",
         ]
-        if any(word in message_lower for word in contact_keywords):
+        purchase_intent_keywords = [
+            "comprar",
+            "quiero comprar",
+            "me interesa",
+            "quiero ver",
+            "quiero agendar",
+            "comprar",
+            "buy",
+            "purchase",
+            "interested in buying",
+        ]
+        if any(word in message_lower for word in contact_keywords + purchase_intent_keywords):
             state.step = "next_action"
+
+        # Extract lead information when in next_action step
+        if state.step == "next_action" or state.step == "collect_contact_info":
+            # Extract name - look for patterns like "me llamo", "mi nombre es", "soy"
+            if state.lead_name is None:
+                name_patterns = [
+                    r"me llamo\s+([A-Za-zÁÉÍÓÚáéíóúÑñ\s]+)",
+                    r"mi nombre es\s+([A-Za-zÁÉÍÓÚáéíóúÑñ\s]+)",
+                    r"soy\s+([A-Za-zÁÉÍÓÚáéíóúÑñ\s]+)",
+                    r"nombre:\s*([A-Za-zÁÉÍÓÚáéíóúÑñ\s]+)",
+                    r"name:\s*([A-Za-zÁÉÍÓÚáéíóúÑñ\s]+)",
+                ]
+                for pattern in name_patterns:
+                    match = re.search(pattern, message, re.IGNORECASE)
+                    if match:
+                        state.lead_name = match.group(1).strip()
+                        break
+
+            # Extract phone - look for phone patterns (Mexican format: 10 digits,
+            # possibly with +52, spaces, dashes)
+            if state.lead_phone is None:
+                phone_patterns = [
+                    r"(\+52\s?)?([1-9]\d{9})",  # +52 followed by 10 digits
+                    r"(\d{10})",  # 10 consecutive digits
+                    r"(\d{3}[\s\-]?\d{3}[\s\-]?\d{4})",  # formatted phone
+                    r"tel[ée]fono[:\s]+([\d\+\s\-]+)",
+                    r"phone[:\s]+([\d\+\s\-]+)",
+                    r"whatsapp[:\s]+([\d\+\s\-]+)",
+                    r"wa[:\s]+([\d\+\s\-]+)",
+                ]
+                for pattern in phone_patterns:
+                    match = re.search(pattern, message_lower)
+                    if match:
+                        # Clean up phone number
+                        phone = re.sub(r"[\s\-]", "", match.group(0))
+                        if phone.startswith("+"):
+                            state.lead_phone = phone
+                        elif len(phone) == 10:
+                            state.lead_phone = f"+52{phone}"
+                        else:
+                            state.lead_phone = phone
+                        break
+
+            # Extract preferred contact time
+            if state.lead_preferred_contact_time is None:
+                time_patterns = [
+                    r"(mañana|morning)",
+                    r"(tarde|afternoon)",
+                    r"(noche|evening|night)",
+                    r"(día|day)",
+                    r"(\d{1,2}[:\s]?(am|pm|AM|PM))",
+                    r"(\d{1,2}:\d{2})",
+                ]
+                time_keywords = {
+                    "mañana": "morning",
+                    "morning": "morning",
+                    "tarde": "afternoon",
+                    "afternoon": "afternoon",
+                    "noche": "evening",
+                    "evening": "evening",
+                    "night": "evening",
+                    "día": "anytime",
+                    "day": "anytime",
+                }
+                for keyword, value in time_keywords.items():
+                    if keyword in message_lower:
+                        state.lead_preferred_contact_time = value
+                        break
+                # If no keyword match, check for time patterns
+                if state.lead_preferred_contact_time is None:
+                    for pattern in time_patterns:
+                        match = re.search(pattern, message_lower)
+                        if match:
+                            state.lead_preferred_contact_time = match.group(0).strip()
+                            break
 
     def _is_faq_intent(self, message: str) -> bool:
         """
@@ -522,7 +654,11 @@ class HandleChatTurnUseCase:
         Returns:
             Tuple of (reply, next_action, suggested_questions) - all in Spanish
         """
-        # Check financing flow validation first (before missing fields)
+        # Check for lead capture flow first (takes priority over other flows)
+        if state.step == "collect_contact_info":
+            return self._generate_lead_capture_response(state)
+
+        # Check financing flow validation (before missing fields)
         # Handle financing flow: down payment -> loan term -> show plans
         if state.financing_interest and state.selected_car_price:
             if state.down_payment is None:
@@ -637,10 +773,13 @@ class HandleChatTurnUseCase:
             )
 
         else:
-            # All fields collected
+            # All fields collected - check if we need to collect contact info
+            if state.step == "collect_contact_info":
+                return self._generate_lead_capture_response(state)
+            # All fields collected, ask about next action
             return (
                 UserMessagesES.COMPLETE,
-                "complete",
+                "next_action",
                 UserMessagesES.SUGGESTED_COMPLETE,
             )
 
@@ -708,7 +847,7 @@ class HandleChatTurnUseCase:
 
             return (
                 reply,
-                "complete",
+                "ask_contact_info",
                 [
                     "Sí, agendar cita",
                     "Tengo más preguntas",
@@ -720,4 +859,55 @@ class HandleChatTurnUseCase:
                 f"Lo siento, {str(e)}. Por favor, proporciona un enganche válido.",
                 "ask_down_payment",
                 UserMessagesES.SUGGESTED_DOWN_PAYMENT,
+            )
+
+    def _generate_lead_capture_response(
+        self, state: ConversationState
+    ) -> tuple[str, str, list[str]]:
+        """
+        Generate response for lead capture flow.
+
+        Args:
+            state: Current conversation state
+
+        Returns:
+            Tuple of (reply, next_action, suggested_questions) - all in Spanish
+        """
+        missing_lead_field = state.get_next_missing_lead_field()
+
+        if missing_lead_field == "lead_name":
+            # Set step to collect_contact_info to enable extraction
+            state.step = "collect_contact_info"
+            return (
+                "¡Excelente! Para poder ayudarte mejor, necesito algunos datos de contacto. "
+                "¿Cómo te llamas?",
+                "collect_contact_info",
+                [],
+            )
+        elif missing_lead_field == "lead_phone":
+            state.step = "collect_contact_info"
+            return (
+                f"Gracias {state.lead_name or ''}. "
+                "¿Podrías proporcionarme tu número de teléfono o WhatsApp?",
+                "collect_contact_info",
+                [],
+            )
+        elif missing_lead_field == "lead_preferred_contact_time":
+            state.step = "collect_contact_info"
+            return (
+                f"Perfecto {state.lead_name or ''}. "
+                "¿En qué horario prefieres que te contactemos? "
+                "(mañana, tarde, noche, o cualquier momento)",
+                "collect_contact_info",
+                ["Mañana", "Tarde", "Noche", "Cualquier momento"],
+            )
+        else:
+            # All lead info collected
+            state.step = "handoff_to_human"
+            return (
+                f"¡Perfecto {state.lead_name or ''}! "
+                "Hemos registrado tu información. Un asesor se pondrá en contacto contigo pronto. "
+                "Gracias por tu interés en Kavak.",
+                "handoff_to_human",
+                [],
             )
