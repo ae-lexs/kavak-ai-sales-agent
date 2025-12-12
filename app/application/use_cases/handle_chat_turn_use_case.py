@@ -66,6 +66,36 @@ class HandleChatTurnUseCase:
         turn_id = turn_id or "unknown"
         step_before = None
 
+        # Check for reset keyword
+        message_lower = request.message.lower()
+        reset_keywords = ["reset", "reiniciar", "empezar de nuevo", "comenzar de nuevo"]
+        if any(keyword in message_lower for keyword in reset_keywords):
+            # Delete existing state
+            await self._state_repository.delete(request.session_id)
+            # Create fresh state and save it
+            state = ConversationState(session_id=request.session_id)
+            await self._state_repository.save(request.session_id, state)
+            self._log(
+                request.session_id,
+                turn_id,
+                "use_case",
+                action="reset",
+            )
+            return ChatResponse(
+                session_id=request.session_id,
+                reply="¡Perfecto! Hemos reiniciado la conversación. ¿En qué puedo ayudarte hoy?",
+                next_action="ask_need",
+                suggested_questions=[
+                    "Estoy buscando un auto familiar",
+                    "Quiero un auto para la ciudad",
+                    "Necesito un auto para trabajo",
+                ],
+                debug={
+                    "step": "need",
+                    "action": "reset",
+                },
+            )
+
         # Get or create conversation state
         state = await self._state_repository.get(request.session_id)
         if state is None:
@@ -180,6 +210,7 @@ class HandleChatTurnUseCase:
 
         # Update last_question with the reply
         state.last_question = reply
+        state.touch()  # Update timestamp
 
         # Save updated state
         await self._state_repository.save(request.session_id, state)
@@ -247,9 +278,19 @@ class HandleChatTurnUseCase:
             price_pattern = r"[\$]?\s*(\d{1,3}(?:[,\s]\d{3})*(?:\.\d{2})?)"
             prices = re.findall(price_pattern, message)
             if prices:
-                # Take the first price found
-                state.budget = prices[0]
-                state.step = "options"
+                # Validate price is reasonable (at least 50,000 MXN)
+                price_str = prices[0].replace(",", "").replace(" ", "")
+                try:
+                    price_value = float(price_str)
+                    if price_value >= 50000:
+                        state.budget = prices[0]
+                        state.step = "options"
+                    else:
+                        # Price too low - will show error in response
+                        state.budget = "invalid"
+                except ValueError:
+                    # Invalid price format - will show error in response
+                    state.budget = "invalid"
             # Look for budget keywords in Spanish
             elif any(
                 word in message_lower
@@ -354,8 +395,12 @@ class HandleChatTurnUseCase:
             term_match = re.search(term_pattern, message_lower)
             if term_match:
                 term = int(term_match.group(1))
+                # Validate term is in supported range
                 if term in [36, 48, 60, 72]:
                     state.loan_term = term
+                else:
+                    # Store invalid term to show error in response
+                    state.loan_term = term  # Will be validated in response generation
 
         # Update step to next_action if user mentions scheduling/contact
         contact_keywords = [
@@ -477,6 +522,36 @@ class HandleChatTurnUseCase:
         Returns:
             Tuple of (reply, next_action, suggested_questions) - all in Spanish
         """
+        # Check financing flow validation first (before missing fields)
+        # Handle financing flow: down payment -> loan term -> show plans
+        if state.financing_interest and state.selected_car_price:
+            if state.down_payment is None:
+                return (
+                    UserMessagesES.ask_down_payment(state.selected_car_price),
+                    "ask_down_payment",
+                    UserMessagesES.SUGGESTED_DOWN_PAYMENT,
+                )
+            elif state.loan_term is None:
+                return (
+                    UserMessagesES.ASK_LOAN_TERM,
+                    "ask_loan_term",
+                    UserMessagesES.SUGGESTED_LOAN_TERM,
+                )
+            elif state.loan_term not in [36, 48, 60, 72]:
+                # Invalid loan term - show error with allowed terms
+                invalid_term = state.loan_term
+                # Clear invalid term so we can ask again
+                state.loan_term = None
+                return (
+                    f"Lo siento, el plazo de {invalid_term} meses no está disponible. "
+                    "Ofrecemos plazos de 36, 48, 60 o 72 meses. ¿Cuál prefieres?",
+                    "ask_loan_term",
+                    ["36 meses", "48 meses", "60 meses", "72 meses"],
+                )
+            else:
+                # Calculate and show financing plans
+                return self._generate_financing_plans_response(state)
+
         missing_field = state.get_next_missing_field()
 
         if missing_field == "need":
@@ -487,6 +562,20 @@ class HandleChatTurnUseCase:
             )
 
         elif missing_field == "budget":
+            # Check if budget was invalid
+            if state.budget == "invalid":
+                # Clear invalid budget so we can ask again
+                state.budget = None
+                return (
+                    "Por favor, proporciona un presupuesto válido. "
+                    "El monto mínimo es de $50,000 MXN. ¿Cuál es tu presupuesto?",
+                    "ask_budget",
+                    [
+                        "Mi presupuesto es $200,000",
+                        "Mi presupuesto es $300,000",
+                        "Mi presupuesto es $500,000",
+                    ],
+                )
             return (
                 UserMessagesES.ask_budget(state.need),
                 "ask_budget",
@@ -494,6 +583,20 @@ class HandleChatTurnUseCase:
             )
 
         elif missing_field == "preferences":
+            # Check if budget was invalid first
+            if state.budget == "invalid":
+                # Clear invalid budget so we can ask again
+                state.budget = None
+                return (
+                    "Por favor, proporciona un presupuesto válido. "
+                    "El monto mínimo es de $50,000 MXN. ¿Cuál es tu presupuesto?",
+                    "ask_budget",
+                    [
+                        "Mi presupuesto es $200,000",
+                        "Mi presupuesto es $300,000",
+                        "Mi presupuesto es $500,000",
+                    ],
+                )
             # If we have cars, show them; otherwise ask for preferences
             if cars and len(cars) > 0:
                 # Store first car price for financing calculations
@@ -532,24 +635,6 @@ class HandleChatTurnUseCase:
                 "ask_financing",
                 UserMessagesES.SUGGESTED_FINANCING,
             )
-
-        # Handle financing flow: down payment -> loan term -> show plans
-        elif state.financing_interest and state.selected_car_price:
-            if state.down_payment is None:
-                return (
-                    UserMessagesES.ask_down_payment(state.selected_car_price),
-                    "ask_down_payment",
-                    UserMessagesES.SUGGESTED_DOWN_PAYMENT,
-                )
-            elif state.loan_term is None:
-                return (
-                    UserMessagesES.ASK_LOAN_TERM,
-                    "ask_loan_term",
-                    UserMessagesES.SUGGESTED_LOAN_TERM,
-                )
-            else:
-                # Calculate and show financing plans
-                return self._generate_financing_plans_response(state)
 
         else:
             # All fields collected

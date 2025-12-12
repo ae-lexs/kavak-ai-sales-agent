@@ -111,5 +111,37 @@ async def get_session_debug(session_id: str) -> dict:
             "loan_term": state.loan_term,
             "selected_car_price": state.selected_car_price,
             "last_question": state.last_question,
+            "created_at": state.created_at.isoformat(),
+            "updated_at": state.updated_at.isoformat(),
         },
+    }
+
+
+@router.post("/debug/session/{session_id}/reset", status_code=status.HTTP_200_OK)
+async def reset_session(session_id: str) -> dict:
+    """
+    Reset conversation state for a session (only enabled if DEBUG_MODE=true).
+
+    Args:
+        session_id: Session identifier
+
+    Returns:
+        Confirmation message
+
+    Raises:
+        HTTPException: 404 if DEBUG_MODE is disabled
+    """
+    if not settings.debug_mode:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Debug endpoint is disabled",
+        )
+
+    # Delete state from repository
+    await _state_repository.delete(session_id)
+
+    return {
+        "session_id": session_id,
+        "message": "Session reset successfully",
+        "status": "reset",
     }

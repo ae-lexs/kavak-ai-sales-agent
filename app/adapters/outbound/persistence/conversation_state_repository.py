@@ -33,3 +33,13 @@ class InMemoryConversationStateRepository(ConversationStateRepository):
             state: Conversation state entity to save
         """
         self._storage[state.session_id] = state
+
+    async def delete(self, session_id: str) -> None:
+        """
+        Delete conversation state for a session.
+
+        Args:
+            session_id: Session identifier
+        """
+        if session_id in self._storage:
+            del self._storage[session_id]

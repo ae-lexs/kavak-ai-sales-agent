@@ -28,6 +28,11 @@ class MockConversationStateRepository(ConversationStateRepository):
         """Save conversation state."""
         self._storage[session_id] = state
 
+    async def delete(self, session_id: str) -> None:
+        """Delete conversation state."""
+        if session_id in self._storage:
+            del self._storage[session_id]
+
 
 class MockCarCatalogRepository(CarCatalogRepository):
     """Mock car catalog repository for testing."""
