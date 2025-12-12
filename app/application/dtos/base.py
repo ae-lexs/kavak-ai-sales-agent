@@ -1,12 +1,9 @@
 """Base DTO class."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class DTO(BaseModel):
     """Base class for application DTOs."""
 
-    class Config:
-        """Pydantic configuration."""
-
-        frozen = True
+    model_config = ConfigDict(frozen=True)

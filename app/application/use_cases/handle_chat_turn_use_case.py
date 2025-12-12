@@ -7,6 +7,7 @@ from app.application.dtos.car import CarSummary
 from app.application.dtos.chat import ChatRequest, ChatResponse
 from app.application.ports.car_catalog_repository import CarCatalogRepository
 from app.application.ports.conversation_state_repository import ConversationStateRepository
+from app.application.use_cases.answer_faq_with_rag import AnswerFaqWithRag
 from app.application.use_cases.calculate_financing_plan import CalculateFinancingPlan
 from app.application.use_cases.user_messages_es import UserMessagesES
 from app.domain.entities.conversation_state import ConversationState
@@ -20,6 +21,7 @@ class HandleChatTurnUseCase:
         self,
         state_repository: ConversationStateRepository,
         car_catalog_repository: CarCatalogRepository,
+        faq_rag_service: Optional[AnswerFaqWithRag] = None,
     ) -> None:
         """
         Initialize handle chat turn use case.
@@ -27,10 +29,12 @@ class HandleChatTurnUseCase:
         Args:
             state_repository: Repository for conversation state
             car_catalog_repository: Repository for car catalog
+            faq_rag_service: Optional FAQ RAG service for answering FAQ questions
         """
         self._state_repository = state_repository
         self._car_catalog_repository = car_catalog_repository
         self._financing_calculator = CalculateFinancingPlan()
+        self._faq_rag_service = faq_rag_service
 
     async def execute(self, request: ChatRequest) -> ChatResponse:
         """
@@ -46,6 +50,20 @@ class HandleChatTurnUseCase:
         state = await self._state_repository.get(request.session_id)
         if state is None:
             state = ConversationState(session_id=request.session_id)
+
+        # Check if this is an FAQ question and route to RAG if so
+        if self._is_faq_intent(request.message) and self._faq_rag_service:
+            reply, suggested_questions = self._faq_rag_service.execute(request.message)
+            return ChatResponse(
+                session_id=request.session_id,
+                reply=reply,
+                next_action="continue_conversation",
+                suggested_questions=suggested_questions,
+                debug={
+                    "step": "faq_rag",
+                    "intent": "faq",
+                },
+            )
 
         # Process message and update state
         self._process_message(request.message, state)
@@ -259,6 +277,71 @@ class HandleChatTurnUseCase:
         ]
         if any(word in message_lower for word in contact_keywords):
             state.step = "next_action"
+
+    def _is_faq_intent(self, message: str) -> bool:
+        """
+        Detect if message is an FAQ intent using keyword matching.
+
+        Args:
+            message: User message
+
+        Returns:
+            True if FAQ intent is detected, False otherwise
+        """
+        message_lower = message.lower()
+
+        # FAQ keywords in Spanish and English
+        faq_keywords = [
+            # Kavak brand
+            "kavak",
+            # Guarantee/Warranty
+            "garantía",
+            "garantia",
+            "warranty",
+            "guarantee",
+            # Return policy
+            "devolución",
+            "devolucion",
+            "return",
+            "reembolso",
+            "refund",
+            # Delivery
+            "entrega",
+            "delivery",
+            "envío",
+            "envio",
+            "shipping",
+            # Inspection
+            "inspección",
+            "inspeccion",
+            "inspection",
+            "revisión",
+            "revision",
+            # Certification
+            "certificado",
+            "certification",
+            "certificado",
+            # Safety/Security
+            "seguridad",
+            "security",
+            "seguro",
+            "safe",
+            # Process/How it works
+            "cómo funciona",
+            "como funciona",
+            "how does it work",
+            "proceso",
+            "process",
+            # General FAQ indicators
+            "qué es",
+            "que es",
+            "what is",
+            "qué ofrecen",
+            "que ofrecen",
+            "what do you offer",
+        ]
+
+        return any(keyword in message_lower for keyword in faq_keywords)
 
     def _build_search_filters(self, state: ConversationState) -> dict[str, Any]:
         """

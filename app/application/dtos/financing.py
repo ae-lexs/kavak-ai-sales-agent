@@ -1,5 +1,7 @@
 """Financing DTOs."""
 
+from pydantic import ConfigDict
+
 from app.application.dtos.base import DTO
 
 
@@ -12,10 +14,8 @@ class FinancingPlan(DTO):
     total_paid: float
     total_interest: float
 
-    class Config:
-        """Pydantic configuration."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "term_months": 48,
                 "financed_amount": 315000.0,
@@ -24,3 +24,4 @@ class FinancingPlan(DTO):
                 "total_interest": 68304.0,
             }
         }
+    )
