@@ -35,14 +35,14 @@ class CSVCarCatalogRepository(CarCatalogRepository):
             raise FileNotFoundError(f"Catalog CSV file not found: {self._csv_path}")
 
         self._cars = []
-        with open(self._csv_path, "r", encoding="utf-8") as file:
+        with open(self._csv_path, encoding="utf-8") as file:
             reader = csv.DictReader(file)
             for row in reader:
                 try:
                     car = self._map_row_to_car_summary(row)
                     if car:
                         self._cars.append(car)
-                except (ValueError, KeyError) as e:
+                except (ValueError, KeyError):
                     # Skip invalid rows, log error in production
                     continue
 
@@ -92,7 +92,9 @@ class CSVCarCatalogRepository(CarCatalogRepository):
         """
         return text.lower().strip()
 
-    def _matches_make_model(self, car: CarSummary, make_filter: str = None, model_filter: str = None) -> bool:
+    def _matches_make_model(
+        self, car: CarSummary, make_filter: str = None, model_filter: str = None
+    ) -> bool:
         """
         Check if car matches make/model filters with normalization.
 
@@ -107,18 +109,27 @@ class CSVCarCatalogRepository(CarCatalogRepository):
         if make_filter:
             normalized_filter = self._normalize_text(make_filter)
             normalized_car_make = self._normalize_text(car.make)
-            # Token matching: check if filter tokens are in car make
+            # Token matching: each filter token must match at least one car token
             filter_tokens = normalized_filter.split()
             car_tokens = normalized_car_make.split()
-            if not any(token in normalized_car_make for token in filter_tokens):
+            # Check if all filter tokens have a match in car tokens (substring matching)
+            if not all(
+                any(filter_token in car_token for car_token in car_tokens)
+                for filter_token in filter_tokens
+            ):
                 return False
 
         if model_filter:
             normalized_filter = self._normalize_text(model_filter)
             normalized_car_model = self._normalize_text(car.model)
-            # Token matching: check if filter tokens are in car model
+            # Token matching: each filter token must match at least one car token
             filter_tokens = normalized_filter.split()
-            if not any(token in normalized_car_model for token in filter_tokens):
+            car_tokens = normalized_car_model.split()
+            # Check if all filter tokens have a match in car tokens (substring matching)
+            if not all(
+                any(filter_token in car_token for car_token in car_tokens)
+                for filter_token in filter_tokens
+            ):
                 return False
 
         return True
@@ -148,12 +159,16 @@ class CSVCarCatalogRepository(CarCatalogRepository):
         # Filter by make
         if "make" in filters and filters["make"] is not None:
             make_filter = str(filters["make"])
-            results = [car for car in results if self._matches_make_model(car, make_filter=make_filter)]
+            results = [
+                car for car in results if self._matches_make_model(car, make_filter=make_filter)
+            ]
 
         # Filter by model
         if "model" in filters and filters["model"] is not None:
             model_filter = str(filters["model"])
-            results = [car for car in results if self._matches_make_model(car, model_filter=model_filter)]
+            results = [
+                car for car in results if self._matches_make_model(car, model_filter=model_filter)
+            ]
 
         # Filter by year range
         if "min_year" in filters and filters["min_year"] is not None:
@@ -171,4 +186,3 @@ class CSVCarCatalogRepository(CarCatalogRepository):
             pass
 
         return results
-

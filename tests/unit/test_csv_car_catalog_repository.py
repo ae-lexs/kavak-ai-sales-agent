@@ -1,9 +1,7 @@
 """Unit tests for CSVCarCatalogRepository."""
 
-import csv
 import os
 import tempfile
-from pathlib import Path
 
 import pytest
 
@@ -20,7 +18,7 @@ def sample_csv_content() -> str:
 160422,56419,866999.0,BMW,Serie 2,2018,3.0 M2 DCT,Sí,4468.0,1854.0,1410.0,Sí
 308634,76000,238999.0,Toyota,Avanza,2018,1.5 XLE AT,Sí,4140.0,1660.0,1695.0,
 123456,50000,350000.0,Toyota,Corolla,2020,1.8 LE AT,,4140.0,1660.0,1695.0,
-789012,30000,450000.0,Honda,Civic,2021,2.0 EX AT,Sí,4500.0,1800.0,1400.0,Sí"""
+789012,30000,450000.0,Honda,Civic,2021,2.0 EX AT,Sí,4500.0,1800.0,1400.0,Sí"""  # noqa: E501
 
 
 @pytest.fixture
@@ -199,4 +197,3 @@ invalid,,,Missing,Fields,0,,,,
         assert all(car.id in ["123", "456"] for car in cars)
     finally:
         os.unlink(temp_path)
-
