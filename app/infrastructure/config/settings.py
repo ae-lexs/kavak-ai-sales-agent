@@ -1,16 +1,18 @@
 """Application settings."""
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Application configuration settings."""
 
-    class Config:
-        """Pydantic configuration."""
+    debug_mode: bool = False
 
-        env_file = ".env"
-        case_sensitive = False
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=False,
+        env_prefix="",
+    )
 
 
 settings = Settings()

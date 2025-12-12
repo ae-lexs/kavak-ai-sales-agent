@@ -1,7 +1,7 @@
 """Handle chat turn use case with rule-based state machine."""
 
 import re
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from app.application.dtos.car import CarSummary
 from app.application.dtos.chat import ChatRequest, ChatResponse
@@ -22,6 +22,7 @@ class HandleChatTurnUseCase:
         state_repository: ConversationStateRepository,
         car_catalog_repository: CarCatalogRepository,
         faq_rag_service: Optional[AnswerFaqWithRag] = None,
+        logger: Optional[Callable[[str, str, str, Any], None]] = None,
     ) -> None:
         """
         Initialize handle chat turn use case.
@@ -30,30 +31,74 @@ class HandleChatTurnUseCase:
             state_repository: Repository for conversation state
             car_catalog_repository: Repository for car catalog
             faq_rag_service: Optional FAQ RAG service for answering FAQ questions
+            logger: Optional logger function (session_id, turn_id, component, **kwargs)
         """
         self._state_repository = state_repository
         self._car_catalog_repository = car_catalog_repository
         self._financing_calculator = CalculateFinancingPlan()
         self._faq_rag_service = faq_rag_service
+        self._logger = logger
 
-    async def execute(self, request: ChatRequest) -> ChatResponse:
+    def _log(self, session_id: str, turn_id: str, component: str, **kwargs: Any) -> None:
+        """
+        Log event if logger is available.
+
+        Args:
+            session_id: Session identifier
+            turn_id: Turn identifier
+            component: Component name
+            **kwargs: Additional log fields
+        """
+        if self._logger:
+            self._logger(session_id, turn_id, component, **kwargs)
+
+    async def execute(self, request: ChatRequest, turn_id: Optional[str] = None) -> ChatResponse:
         """
         Execute chat turn handling.
 
         Args:
             request: Chat request DTO
+            turn_id: Optional turn identifier for logging
 
         Returns:
             Chat response DTO
         """
+        turn_id = turn_id or "unknown"
+        step_before = None
+
         # Get or create conversation state
         state = await self._state_repository.get(request.session_id)
         if state is None:
             state = ConversationState(session_id=request.session_id)
+        else:
+            step_before = state.step
 
         # Check if this is an FAQ question and route to RAG if so
         if self._is_faq_intent(request.message) and self._faq_rag_service:
+            self._log(
+                request.session_id,
+                turn_id,
+                "use_case",
+                intent_detected="faq",
+            )
+            # Execute RAG and log retrieval
             reply, suggested_questions = self._faq_rag_service.execute(request.message)
+            # Retrieve chunks for logging if repository is accessible
+            try:
+                if hasattr(self._faq_rag_service, "_knowledge_base_repository"):
+                    chunks = self._faq_rag_service._knowledge_base_repository.retrieve(
+                        request.message, top_k=5
+                    )
+                    self._log(
+                        request.session_id,
+                        turn_id,
+                        "use_case",
+                        rag_retrieval_top_score=chunks[0].score if chunks else 0.0,
+                        rag_chunks_count=len(chunks),
+                    )
+            except (AttributeError, Exception):
+                # If repository is not accessible (e.g., in mocks), skip detailed logging
+                pass
             return ChatResponse(
                 session_id=request.session_id,
                 reply=reply,
@@ -65,20 +110,73 @@ class HandleChatTurnUseCase:
                 },
             )
 
+        # Log commercial flow intent
+        self._log(
+            request.session_id,
+            turn_id,
+            "use_case",
+            intent_detected="commercial_flow",
+        )
+
         # Process message and update state
         self._process_message(request.message, state)
+
+        # Log missing fields
+        missing_field = state.get_next_missing_field()
+        if missing_field:
+            self._log(
+                request.session_id,
+                turn_id,
+                "use_case",
+                missing_fields=[missing_field],
+            )
 
         # If step is "options", search for cars
         cars = []
         if state.step == "options":
             filters = self._build_search_filters(state)
+            self._log(
+                request.session_id,
+                turn_id,
+                "use_case",
+                catalog_filters=filters,
+            )
             cars = await self._car_catalog_repository.search(filters)
+            self._log(
+                request.session_id,
+                turn_id,
+                "use_case",
+                catalog_results_count=len(cars),
+            )
             # Store first car price for financing calculations
             if cars and len(cars) > 0 and not state.selected_car_price:
                 state.selected_car_price = cars[0].price_mxn
 
+        # Log flow step transition
+        if step_before != state.step:
+            self._log(
+                request.session_id,
+                turn_id,
+                "use_case",
+                flow_step_before=step_before,
+                flow_step_after=state.step,
+            )
+
         # Determine next action and generate response
         reply, next_action, suggested_questions = self._generate_response(state, cars)
+
+        # Log financing calculation if applicable
+        if state.financing_interest and state.selected_car_price and state.down_payment:
+            self._log(
+                request.session_id,
+                turn_id,
+                "use_case",
+                financing_inputs={
+                    "car_price": state.selected_car_price,
+                    "down_payment": state.down_payment,
+                    "loan_term": state.loan_term,
+                },
+            )
 
         # Update last_question with the reply
         state.last_question = reply

@@ -14,6 +14,7 @@ from app.application.ports.conversation_state_repository import ConversationStat
 from app.application.ports.knowledge_base_repository import KnowledgeBaseRepository
 from app.application.use_cases.answer_faq_with_rag import AnswerFaqWithRag
 from app.application.use_cases.handle_chat_turn_use_case import HandleChatTurnUseCase
+from app.infrastructure.logging.logger import log_turn
 
 
 def create_conversation_state_repository() -> ConversationStateRepository:
@@ -67,4 +68,14 @@ def create_handle_chat_turn_use_case() -> HandleChatTurnUseCase:
     state_repository = create_conversation_state_repository()
     car_catalog_repository = create_car_catalog_repository()
     faq_rag_service = create_faq_rag_service()
-    return HandleChatTurnUseCase(state_repository, car_catalog_repository, faq_rag_service)
+
+    # Wire logger function
+    def _logger_func(session_id, turn_id, component, **kwargs):
+        log_turn(session_id, turn_id, component, **kwargs)
+
+    return HandleChatTurnUseCase(
+        state_repository,
+        car_catalog_repository,
+        faq_rag_service,
+        logger=_logger_func,
+    )
