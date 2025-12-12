@@ -50,4 +50,3 @@ def test_conversation_state_get_next_missing_field():
 
     state.contact_intent = True
     assert state.get_next_missing_field() is None
-

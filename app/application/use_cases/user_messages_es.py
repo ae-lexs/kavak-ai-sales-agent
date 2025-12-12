@@ -25,9 +25,7 @@ class UserMessagesES:
                 f"¡Excelente! Entiendo que buscas un auto {need}. "
                 "¿Cuál es tu rango de presupuesto? Puedes decirme un monto específico o un rango."
             )
-        return (
-            "¿Cuál es tu rango de presupuesto? Puedes decirme un monto específico o un rango."
-        )
+        return "¿Cuál es tu rango de presupuesto? Puedes decirme un monto específico o un rango."
 
     SUGGESTED_BUDGET = [
         "Mi presupuesto es alrededor de $200,000",
@@ -110,8 +108,7 @@ class UserMessagesES:
 
     # Loan term collection
     ASK_LOAN_TERM = (
-        "Excelente. ¿En cuántos meses te gustaría pagar? "
-        "Ofrecemos planes de 36, 48, 60 o 72 meses."
+        "Excelente. ¿En cuántos meses te gustaría pagar? Ofrecemos planes de 36, 48, 60 o 72 meses."
     )
     SUGGESTED_LOAN_TERM = [
         "36 meses",
@@ -142,4 +139,3 @@ class UserMessagesES:
         "Muéstrame recomendaciones de autos",
         "Tengo más preguntas",
     ]
-

@@ -51,4 +51,3 @@ class ChatResponse(DTO):
                 "debug": {"current_step": "budget", "need": "family", "budget": None},
             }
         }
-

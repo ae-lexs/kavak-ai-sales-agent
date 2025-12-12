@@ -23,4 +23,3 @@ class APR:
     def as_percentage(self) -> float:
         """Get APR as percentage (e.g., 10.0 for 10%)."""
         return self.rate * 100
-

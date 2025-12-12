@@ -20,4 +20,3 @@ class LoanTermMonths:
     def years(self) -> float:
         """Get loan term in years."""
         return self.months / 12
-

@@ -21,4 +21,3 @@ class CarCatalogRepository(ABC):
             List of car summaries matching the filters
         """
         pass
-

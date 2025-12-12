@@ -32,4 +32,3 @@ class ConversationStateRepository(ABC):
             state: Conversation state entity to save
         """
         pass
-

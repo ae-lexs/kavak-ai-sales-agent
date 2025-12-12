@@ -26,4 +26,3 @@ class CarSummary(DTO):
                 "mileage_km": 15000,
             }
         }
-

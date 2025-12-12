@@ -24,9 +24,7 @@ class Container:
         self._car_catalog_repository: CarCatalogRepository = MockCarCatalogRepository()
 
         # Chat adapter (uses state repository and car catalog repository)
-        self._chat_adapter = LLMRAGChatAdapter(
-            self._state_repository, self._car_catalog_repository
-        )
+        self._chat_adapter = LLMRAGChatAdapter(self._state_repository, self._car_catalog_repository)
 
         # Use cases
         self._chat_use_case = ChatUseCase(self._chat_adapter)

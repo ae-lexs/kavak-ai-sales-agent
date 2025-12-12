@@ -46,4 +46,3 @@ class MockCarCatalogRepository(CarCatalogRepository):
                 mileage_km=8000,
             ),
         ]
-

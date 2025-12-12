@@ -115,4 +115,3 @@ class CalculateFinancingPlan:
                 continue
 
         return plans
-

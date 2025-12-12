@@ -173,13 +173,13 @@ async def test_handle_chat_turn_all_steps():
     )
     # Cars are found, so it goes directly to financing
     assert response2.next_action == "ask_financing"
-    
+
     # Step 3: Set preferences first (since it's still missing)
     response3 = await use_case.execute(
         ChatRequest(session_id=session_id, message="Automática", channel="api")
     )
     assert response3.next_action == "ask_financing"
-    
+
     # Step 4: Financing
     response4 = await use_case.execute(
         ChatRequest(session_id=session_id, message="Sí, me interesa financiamiento", channel="api")

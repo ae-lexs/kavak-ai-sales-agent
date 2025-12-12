@@ -51,4 +51,3 @@ class ConversationState:
         if self.financing_interest is None:
             return "financing_interest"
         return None
-

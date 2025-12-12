@@ -34,4 +34,3 @@ class InMemoryConversationStateRepository(ConversationStateRepository):
             state: Conversation state entity to save
         """
         self._storage[session_id] = state
-

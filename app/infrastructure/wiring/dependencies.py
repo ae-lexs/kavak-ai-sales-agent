@@ -41,4 +41,3 @@ def create_handle_chat_turn_use_case() -> HandleChatTurnUseCase:
     state_repository = create_conversation_state_repository()
     car_catalog_repository = create_car_catalog_repository()
     return HandleChatTurnUseCase(state_repository, car_catalog_repository)
-
