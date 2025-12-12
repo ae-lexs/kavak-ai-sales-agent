@@ -99,3 +99,39 @@ This means:
 - **Flexibility**: Easy to swap adapters (e.g., change database, add new API)
 - **Maintainability**: Clear boundaries make code easier to understand and modify
 
+## Running the Application
+
+### Prerequisites
+
+- Python 3.9+
+- pip
+
+### Installation
+
+1. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+### Running with uvicorn
+
+Start the FastAPI application using uvicorn:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+The application will be available at `http://localhost:8000`
+
+- API documentation: `http://localhost:8000/docs`
+- Health check: `http://localhost:8000/health`
+- Chat endpoint: `POST http://localhost:8000/chat`
+
+### Running in production
+
+For production, use uvicorn with appropriate workers:
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
