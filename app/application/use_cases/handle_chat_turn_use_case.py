@@ -1,9 +1,11 @@
 """Handle chat turn use case with rule-based state machine."""
 
 import re
-from typing import Optional
+from typing import Any, Optional
 
+from app.application.dtos.car import CarSummary
 from app.application.dtos.chat import ChatRequest, ChatResponse
+from app.application.ports.car_catalog_repository import CarCatalogRepository
 from app.application.ports.conversation_state_repository import ConversationStateRepository
 from app.application.use_cases.user_messages_es import UserMessagesES
 from app.domain.entities.conversation_state import ConversationState
@@ -12,14 +14,20 @@ from app.domain.entities.conversation_state import ConversationState
 class HandleChatTurnUseCase:
     """Use case for handling chat turns with deterministic rule-based flow."""
 
-    def __init__(self, state_repository: ConversationStateRepository) -> None:
+    def __init__(
+        self,
+        state_repository: ConversationStateRepository,
+        car_catalog_repository: CarCatalogRepository,
+    ) -> None:
         """
         Initialize handle chat turn use case.
 
         Args:
             state_repository: Repository for conversation state
+            car_catalog_repository: Repository for car catalog
         """
         self._state_repository = state_repository
+        self._car_catalog_repository = car_catalog_repository
 
     async def execute(self, request: ChatRequest) -> ChatResponse:
         """
@@ -39,8 +47,14 @@ class HandleChatTurnUseCase:
         # Process message and update state
         self._process_message(request.message, state)
 
+        # If step is "options", search for cars
+        cars = []
+        if state.step == "options":
+            filters = self._build_search_filters(state)
+            cars = await self._car_catalog_repository.search(filters)
+
         # Determine next action and generate response
-        reply, next_action, suggested_questions = self._generate_response(state)
+        reply, next_action, suggested_questions = self._generate_response(state, cars)
         
         # Update last_question with the reply
         state.last_question = reply
@@ -190,8 +204,32 @@ class HandleChatTurnUseCase:
         if any(word in message_lower for word in contact_keywords):
             state.step = "next_action"
 
+    def _build_search_filters(self, state: ConversationState) -> dict[str, Any]:
+        """
+        Build search filters from conversation state.
+
+        Args:
+            state: Current conversation state
+
+        Returns:
+            Dictionary of search filters
+        """
+        filters: dict[str, Any] = {}
+        
+        if state.need:
+            filters["need"] = state.need
+        if state.budget:
+            # Extract numeric value from budget string
+            budget_match = re.search(r"(\d+)", state.budget.replace(",", "").replace("$", ""))
+            if budget_match:
+                filters["max_price"] = float(budget_match.group(1))
+        if state.preferences:
+            filters["preferences"] = state.preferences
+            
+        return filters
+
     def _generate_response(
-        self, state: ConversationState
+        self, state: ConversationState, cars: Optional[list[CarSummary]] = None
     ) -> tuple[str, str, list[str]]:
         """
         Generate response based on current state.
@@ -219,11 +257,33 @@ class HandleChatTurnUseCase:
             )
 
         elif missing_field == "preferences":
-            return (
-                UserMessagesES.ask_preferences(state.budget),
-                "ask_preferences",
-                UserMessagesES.SUGGESTED_PREFERENCES,
-            )
+            # If we have cars, show them; otherwise ask for preferences
+            if cars and len(cars) > 0:
+                car_list = "\n".join(
+                    [
+                        f"- {car.make} {car.model} {car.year}: ${car.price_mxn:,.0f} MXN ({car.mileage_km:,} km)"
+                        for car in cars[:3]
+                    ]
+                )
+                reply = (
+                    f"¡Perfecto! Basándome en tus preferencias, aquí tienes algunas opciones:\n\n{car_list}\n\n"
+                    "¿Te gustaría explorar opciones de financiamiento para alguno de estos autos?"
+                )
+                return (
+                    reply,
+                    "ask_financing",
+                    [
+                        "Sí, me interesa el financiamiento",
+                        "Quiero ver más opciones",
+                        "Tengo más preguntas",
+                    ],
+                )
+            else:
+                return (
+                    UserMessagesES.ask_preferences(state.budget),
+                    "ask_preferences",
+                    UserMessagesES.SUGGESTED_PREFERENCES,
+                )
 
         elif missing_field == "financing_interest":
             return (

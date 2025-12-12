@@ -1,9 +1,13 @@
 """Dependency injection container."""
 
+from app.adapters.outbound.catalog_csv.mock_car_catalog_repository import (
+    MockCarCatalogRepository,
+)
 from app.adapters.outbound.llm_rag.chat_adapter import LLMRAGChatAdapter
 from app.adapters.outbound.state.conversation_state_repository import (
     InMemoryConversationStateRepository,
 )
+from app.application.ports.car_catalog_repository import CarCatalogRepository
 from app.application.ports.conversation_state_repository import ConversationStateRepository
 from app.application.use_cases.chat_use_case import ChatUseCase
 
@@ -16,8 +20,13 @@ class Container:
         # State repository
         self._state_repository: ConversationStateRepository = InMemoryConversationStateRepository()
 
-        # Chat adapter (uses state repository internally)
-        self._chat_adapter = LLMRAGChatAdapter(self._state_repository)
+        # Car catalog repository
+        self._car_catalog_repository: CarCatalogRepository = MockCarCatalogRepository()
+
+        # Chat adapter (uses state repository and car catalog repository)
+        self._chat_adapter = LLMRAGChatAdapter(
+            self._state_repository, self._car_catalog_repository
+        )
 
         # Use cases
         self._chat_use_case = ChatUseCase(self._chat_adapter)
