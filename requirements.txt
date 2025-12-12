@@ -1,0 +1,12 @@
+# Production dependencies for Kavak AI Sales Agent
+
+# Web framework
+fastapi>=0.104.0,<1.0.0
+
+# Data validation and settings
+pydantic>=2.5.0,<3.0.0
+pydantic-settings>=2.1.0,<3.0.0
+
+# ASGI server
+uvicorn[standard]>=0.24.0,<1.0.0
+
