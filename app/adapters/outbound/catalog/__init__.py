@@ -1,0 +1,2 @@
+"""Catalog outbound adapter."""
+

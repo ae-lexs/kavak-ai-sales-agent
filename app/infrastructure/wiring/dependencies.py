@@ -1,7 +1,7 @@
 """Dependency injection factory functions."""
 
-from app.adapters.outbound.catalog_csv.mock_car_catalog_repository import (
-    MockCarCatalogRepository,
+from app.adapters.outbound.catalog.csv_car_catalog_repository import (
+    CSVCarCatalogRepository,
 )
 from app.adapters.outbound.state.conversation_state_repository import (
     InMemoryConversationStateRepository,
@@ -28,7 +28,7 @@ def create_car_catalog_repository() -> CarCatalogRepository:
     Returns:
         CarCatalogRepository instance
     """
-    return MockCarCatalogRepository()
+    return CSVCarCatalogRepository()
 
 
 def create_handle_chat_turn_use_case() -> HandleChatTurnUseCase:
