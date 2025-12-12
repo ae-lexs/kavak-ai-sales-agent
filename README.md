@@ -2,6 +2,75 @@
 
 AI-powered sales agent built with FastAPI using Clean Architecture (Ports & Adapters pattern).
 
+## Quickstart
+
+Get the project running locally in under 2 minutes.
+
+### Prerequisites
+
+- Python 3.9+
+- pip
+- make (optional, but recommended)
+
+### Setup
+
+1. **Create a virtual environment:**
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   pip install -r requirements-dev.txt
+   ```
+
+3. **Run the server:**
+   ```bash
+   make dev
+   # Or manually: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+   ```
+
+   The API will be available at `http://localhost:8000`
+
+4. **Run tests:**
+   ```bash
+   make test
+   # Or manually: pytest -q
+   ```
+
+### Try It Out
+
+**Health check:**
+```bash
+curl http://localhost:8000/health
+```
+
+**Chat endpoint:**
+```bash
+curl -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id": "test_session",
+    "message": "Estoy buscando un auto familiar",
+    "channel": "api"
+  }'
+```
+
+**Run the demo script:**
+```bash
+chmod +x scripts/demo.sh
+./scripts/demo.sh
+```
+
+The demo script simulates a full conversation flow in Spanish (need → budget → options → financing).
+
+### Available Make Targets
+
+- `make dev` - Run FastAPI development server with auto-reload
+- `make test` - Run test suite
+- `make lint` - Check code formatting and linting
+
 ## Architecture
 
 This project follows Clean Architecture principles with clear separation of concerns and dependency inversion.
