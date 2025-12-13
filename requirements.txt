@@ -7,7 +7,6 @@ python-multipart>=0.0.6,<1.0.0  # Required for form data (Twilio webhook)
 # Data validation and settings
 pydantic>=2.5.0,<3.0.0
 pydantic-settings>=2.1.0,<3.0.0
-python-dotenv>=1.0.0,<2.0.0  # Environment variable management
 
 # ASGI server
 uvicorn[standard]>=0.24.0,<1.0.0

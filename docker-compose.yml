@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  kavak-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kavak-agent
+    ports:
+      - "8000:8000"
+    environment:
+      # Application Configuration
+      - DEBUG_MODE=${DEBUG_MODE:-false}
+      - STATE_TTL_SECONDS=${STATE_TTL_SECONDS:-86400}
+      
+      # Twilio Configuration (optional)
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
+      - TWILIO_WHATSAPP_NUMBER=${TWILIO_WHATSAPP_NUMBER:-}
+      - TWILIO_VALIDATE_SIGNATURE=${TWILIO_VALIDATE_SIGNATURE:-false}
+      
+      # OpenAI LLM Configuration (optional)
+      - LLM_ENABLED=${LLM_ENABLED:-false}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - OPENAI_TIMEOUT_SECONDS=${OPENAI_TIMEOUT_SECONDS:-10}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+

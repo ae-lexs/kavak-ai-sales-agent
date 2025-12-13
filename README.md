@@ -16,8 +16,8 @@ Get the project running locally in under 2 minutes.
 
 1. **Create a virtual environment:**
    ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   python3 -m venv .venv
+   source .venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
 
 2. **Install dependencies:**
@@ -200,19 +200,104 @@ This means:
 
 ## Running the Application
 
-### Prerequisites
+### Docker (Recommended)
+
+The easiest way to run the application is using Docker, which ensures consistent behavior across different environments.
+
+#### Prerequisites
+
+- Docker (Docker Desktop or Docker Engine)
+- Docker Compose (optional, but recommended for easier environment variable management)
+
+#### Build the Docker Image
+
+```bash
+docker build -t kavak-agent .
+```
+
+To use a different Python version:
+```bash
+docker build --build-arg PYTHON_VERSION=3.10 -t kavak-agent .
+```
+
+#### Run with Docker
+
+**Basic run:**
+```bash
+docker run --rm -p 8000:8000 kavak-agent
+```
+
+**With environment variables:**
+```bash
+docker run --rm -p 8000:8000 \
+  -e LLM_ENABLED=true \
+  -e OPENAI_API_KEY=your_api_key_here \
+  -e OPENAI_MODEL=gpt-4o-mini \
+  -e DEBUG_MODE=false \
+  -e TWILIO_ACCOUNT_SID=your_account_sid \
+  -e TWILIO_AUTH_TOKEN=your_auth_token \
+  -e TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886 \
+  -e TWILIO_VALIDATE_SIGNATURE=false \
+  kavak-agent
+```
+
+**Using docker-compose (recommended for development):**
+
+1. Create a `.env` file with your configuration:
+```bash
+LLM_ENABLED=false
+OPENAI_API_KEY=
+DEBUG_MODE=false
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+# ... other variables
+```
+
+2. Run with docker-compose:
+```bash
+docker-compose up
+```
+
+The application will be available at `http://localhost:8000`
+
+**Docker endpoints:**
+- API documentation: `http://localhost:8000/docs`
+- Health check: `http://localhost:8000/health`
+- Chat endpoint: `POST http://localhost:8000/chat`
+- WhatsApp webhook: `POST http://localhost:8000/channels/whatsapp/webhook`
+
+**Note:** When running in Docker, the WhatsApp webhook endpoint will need to be accessible from the internet (use a tunnel service like ngrok for local testing).
+
+#### Docker Environment Variables
+
+All environment variables can be passed to the container:
+
+- `LLM_ENABLED` - Enable/disable LLM feature (default: `false`)
+- `OPENAI_API_KEY` - OpenAI API key (required if `LLM_ENABLED=true`)
+- `OPENAI_MODEL` - OpenAI model name (default: `gpt-4o-mini`)
+- `OPENAI_TIMEOUT_SECONDS` - API timeout in seconds (default: `10`)
+- `DEBUG_MODE` - Enable debug endpoints (default: `false`)
+- `STATE_TTL_SECONDS` - Conversation state TTL (default: `86400`)
+- `TWILIO_ACCOUNT_SID` - Twilio account SID (optional)
+- `TWILIO_AUTH_TOKEN` - Twilio auth token (optional)
+- `TWILIO_WHATSAPP_NUMBER` - Twilio WhatsApp number (optional)
+- `TWILIO_VALIDATE_SIGNATURE` - Enable signature validation (default: `false`)
+
+### Local Development (Python)
+
+#### Prerequisites
 
 - Python 3.9+
 - pip
 
-### Installation
+#### Installation
 
 1. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-### Running with uvicorn
+#### Running with uvicorn
 
 Start the FastAPI application using uvicorn:
 
@@ -235,12 +320,23 @@ When `DEBUG_MODE=true` is set in your environment, additional debug endpoints ar
 - `POST /debug/session/{session_id}/reset` - Reset conversation state for a session
 - `GET /debug/leads` - List all captured leads (requires DEBUG_MODE=true)
 
-**Note:** Debug endpoints are disabled by default for security reasons. To enable them, set `DEBUG_MODE=true` in your environment or `.env` file.
+**Note:** Debug endpoints are disabled by default for security reasons. To enable them, set `DEBUG_MODE=true` in your environment variables (when using Docker Compose, use `.env` file).
 
 ### Running in production
 
-For production, use uvicorn with appropriate workers:
+**Using Docker (recommended):**
+```bash
+docker run -d \
+  --name kavak-agent \
+  -p 8000:8000 \
+  -e LLM_ENABLED=true \
+  -e OPENAI_API_KEY=${OPENAI_API_KEY} \
+  -e DEBUG_MODE=false \
+  --restart unless-stopped \
+  kavak-agent
+```
 
+**Using uvicorn directly:**
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
@@ -294,11 +390,20 @@ For local development, you'll need to expose your local server using a tunnel se
 
 ### Environment Variables
 
-The application uses python-dotenv to load environment variables from a `.env` file. Copy `.env.example` to `.env` and fill in your values:
+### Environment Variables
+
+**For Docker Compose:** Create a `.env` file in the project root (Docker Compose will automatically load it). Copy `.env.example` to `.env` and fill in your values:
 
 ```bash
 cp .env.example .env
 ```
+
+**For local Python development:** You can either:
+- Use a `.env` file (pydantic-settings will automatically load it)
+- Set environment variables in your shell: `export LLM_ENABLED=true`
+- Pass variables when running: `LLM_ENABLED=true uvicorn app.main:app --reload`
+
+**Note:** The `.env` file is primarily used by Docker Compose, but pydantic-settings will also read it for local development if present.
 
 Required/optional environment variables:
 
@@ -329,6 +434,7 @@ OPENAI_TIMEOUT_SECONDS=10
 - Never commit `.env` to version control (it's in `.gitignore`).
 - The `.env.example` file shows all available configuration options.
 - LLM feature is disabled by default. Set `LLM_ENABLED=true` to enable OpenAI-powered responses.
+- The `.env` file is automatically loaded by Docker Compose. For local Python development, pydantic-settings will also read it, or you can set environment variables in your shell.
 
 ### Webhook Endpoint Details
 
@@ -353,7 +459,7 @@ The application includes an optional OpenAI LLM integration that can generate na
 
 ### Configuration
 
-To enable the LLM feature, set the following environment variables in your `.env` file:
+To enable the LLM feature, set the following environment variables (in `.env` file for Docker Compose, or in your shell environment for local development):
 
 ```bash
 # Enable LLM feature
