@@ -281,7 +281,9 @@ async def test_chat_endpoint_invalid_request(client):
             # Missing "message" field
         },
     )
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+    assert (
+        response.status_code == 422
+    )  # HTTP_422_UNPROCESSABLE_ENTITY (deprecated, using numeric value)
 
 
 @pytest.mark.asyncio
@@ -300,29 +302,38 @@ async def test_chat_endpoint_empty_message(client):
 
 
 @pytest.mark.asyncio
-async def test_whatsapp_webhook_success(client):
-    """Test WhatsApp webhook endpoint with Twilio-like payload."""
+async def test_whatsapp_webhook_success_twiml(client):
+    """Test WhatsApp webhook endpoint with form-encoded Twilio payload returns TwiML."""
     response = client.post(
         "/channels/whatsapp/webhook",
-        json={
+        data={
             "From": "+521234567890",
             "Body": "Hola",
             "ProfileName": "Juan Pérez",
         },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
     assert response.status_code == status.HTTP_200_OK
-    data = response.json()
-    # Should return simplified response
-    assert "session_id" in data
-    assert "reply" in data
-    assert data["session_id"] == "+521234567890"
-    # Reply should be in Spanish
-    assert isinstance(data["reply"], str)
-    assert len(data["reply"]) > 0
-    # Should not include full ChatResponse fields
-    assert "next_action" not in data
-    assert "suggested_questions" not in data
-    assert "debug" not in data
+    # Should return TwiML XML
+    assert response.headers["content-type"] == "application/xml"
+    content = response.text
+    # Should be valid TwiML
+    assert "<?xml" in content
+    assert "<Response>" in content
+    assert "<Message>" in content
+    # Should contain Spanish reply
+    assert "</Message>" in content
+    assert "</Response>" in content
+    # Extract message content (between <Message> tags)
+    import re
+
+    message_match = re.search(r"<Message>(.*?)</Message>", content, re.DOTALL)
+    assert message_match is not None
+    reply_text = message_match.group(1)
+    # Reply should be in Spanish and not empty
+    assert len(reply_text) > 0
+    # Should be unescaped (XML entities decoded by parser)
+    assert "Hola" in reply_text or "auto" in reply_text.lower() or "ayudar" in reply_text.lower()
 
 
 @pytest.mark.asyncio
@@ -330,18 +341,24 @@ async def test_whatsapp_webhook_without_profile_name(client):
     """Test WhatsApp webhook endpoint without ProfileName."""
     response = client.post(
         "/channels/whatsapp/webhook",
-        json={
+        data={
             "From": "+529876543210",
             "Body": "Estoy buscando un auto familiar",
         },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
     assert response.status_code == status.HTTP_200_OK
-    data = response.json()
-    assert data["session_id"] == "+529876543210"
-    assert "reply" in data
-    # Reply should be in Spanish
-    assert isinstance(data["reply"], str)
-    assert len(data["reply"]) > 0
+    assert response.headers["content-type"] == "application/xml"
+    content = response.text
+    assert "<Response>" in content
+    assert "<Message>" in content
+    # Should contain Spanish reply
+    import re
+
+    message_match = re.search(r"<Message>(.*?)</Message>", content, re.DOTALL)
+    assert message_match is not None
+    reply_text = message_match.group(1)
+    assert len(reply_text) > 0
 
 
 @pytest.mark.asyncio
@@ -350,16 +367,23 @@ async def test_whatsapp_webhook_uses_same_use_case(client):
     session_id = "+521111111111"
     message = "Necesito un auto familiar"
 
-    # Test via WhatsApp webhook
+    # Test via WhatsApp webhook (form-encoded)
     whatsapp_response = client.post(
         "/channels/whatsapp/webhook",
-        json={
+        data={
             "From": session_id,
             "Body": message,
         },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
     assert whatsapp_response.status_code == status.HTTP_200_OK
-    whatsapp_data = whatsapp_response.json()
+    # Extract reply from TwiML
+    import re
+
+    whatsapp_content = whatsapp_response.text
+    whatsapp_match = re.search(r"<Message>(.*?)</Message>", whatsapp_content, re.DOTALL)
+    assert whatsapp_match is not None
+    whatsapp_reply = whatsapp_match.group(1)
 
     # Test via regular chat endpoint with same session and message
     chat_response = client.post(
@@ -374,5 +398,4 @@ async def test_whatsapp_webhook_uses_same_use_case(client):
     chat_data = chat_response.json()
 
     # Both should produce the same reply (same use case, same state)
-    assert whatsapp_data["reply"] == chat_data["reply"]
-    assert whatsapp_data["session_id"] == chat_data["session_id"]
+    assert whatsapp_reply == chat_data["reply"]
