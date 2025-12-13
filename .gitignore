@@ -42,5 +42,10 @@ coverage.json
 uvicorn.log
 
 # =========================
+# Ruff Cache
+# =========================
+.ruff_cache
+
+# =========================
 # Data (local only)
 # Keep exampl

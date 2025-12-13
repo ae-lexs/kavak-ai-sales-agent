@@ -10,8 +10,9 @@ from app.adapters.outbound.knowledge_base.local_markdown_knowledge_base_reposito
 )
 from app.adapters.outbound.lead.lead_repository import InMemoryLeadRepository
 from app.adapters.outbound.llm.openai_llm_client import OpenAILLMClient
-from app.adapters.outbound.state.conversation_state_repository import (
+from app.adapters.outbound.state import (
     InMemoryConversationStateRepository,
+    PostgresConversationStateRepository,
 )
 from app.application.ports.car_catalog_repository import CarCatalogRepository
 from app.application.ports.conversation_state_repository import ConversationStateRepository
@@ -31,7 +32,12 @@ def create_conversation_state_repository() -> ConversationStateRepository:
     Returns:
         ConversationStateRepository instance
     """
-    return InMemoryConversationStateRepository()
+    if settings.state_repository == "postgres":
+        if not settings.database_url:
+            raise ValueError("DATABASE_URL is required when STATE_REPOSITORY=postgres")
+        return PostgresConversationStateRepository()
+    else:
+        return InMemoryConversationStateRepository()
 
 
 def create_car_catalog_repository() -> CarCatalogRepository:
