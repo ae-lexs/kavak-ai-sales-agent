@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     twilio_auth_token: str = ""
     twilio_whatsapp_number: str = ""
     twilio_validate_signature: bool = False
+    llm_enabled: bool = False
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
+    openai_timeout_seconds: int = 10
 
     model_config = SettingsConfigDict(
         env_file=".env",
