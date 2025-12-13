@@ -320,7 +320,7 @@ When `DEBUG_MODE=true` is set in your environment, additional debug endpoints ar
 - `POST /debug/session/{session_id}/reset` - Reset conversation state for a session
 - `GET /debug/leads` - List all captured leads (requires DEBUG_MODE=true)
 
-**Note:** Debug endpoints are disabled by default for security reasons. To enable them, set `DEBUG_MODE=true` in your environment or `.env` file.
+**Note:** Debug endpoints are disabled by default for security reasons. To enable them, set `DEBUG_MODE=true` in your environment variables (when using Docker Compose, use `.env` file).
 
 ### Running in production
 
@@ -390,11 +390,20 @@ For local development, you'll need to expose your local server using a tunnel se
 
 ### Environment Variables
 
-The application uses python-dotenv to load environment variables from a `.env` file. Copy `.env.example` to `.env` and fill in your values:
+### Environment Variables
+
+**For Docker Compose:** Create a `.env` file in the project root (Docker Compose will automatically load it). Copy `.env.example` to `.env` and fill in your values:
 
 ```bash
 cp .env.example .env
 ```
+
+**For local Python development:** You can either:
+- Use a `.env` file (pydantic-settings will automatically load it)
+- Set environment variables in your shell: `export LLM_ENABLED=true`
+- Pass variables when running: `LLM_ENABLED=true uvicorn app.main:app --reload`
+
+**Note:** The `.env` file is primarily used by Docker Compose, but pydantic-settings will also read it for local development if present.
 
 Required/optional environment variables:
 
@@ -425,6 +434,7 @@ OPENAI_TIMEOUT_SECONDS=10
 - Never commit `.env` to version control (it's in `.gitignore`).
 - The `.env.example` file shows all available configuration options.
 - LLM feature is disabled by default. Set `LLM_ENABLED=true` to enable OpenAI-powered responses.
+- The `.env` file is automatically loaded by Docker Compose. For local Python development, pydantic-settings will also read it, or you can set environment variables in your shell.
 
 ### Webhook Endpoint Details
 
@@ -449,7 +459,7 @@ The application includes an optional OpenAI LLM integration that can generate na
 
 ### Configuration
 
-To enable the LLM feature, set the following environment variables in your `.env` file:
+To enable the LLM feature, set the following environment variables (in `.env` file for Docker Compose, or in your shell environment for local development):
 
 ```bash
 # Enable LLM feature
