@@ -12,33 +12,37 @@ from app.adapters.outbound.knowledge_base.local_markdown_knowledge_base_reposito
 
 @pytest.fixture
 def sample_knowledge_base():
-    """Create a temporary knowledge base file for testing."""
-    content = """# Kavak Value Proposition
+    """Create a temporary knowledge base file for testing using Spanish content."""
+    content = """# Kavak México – Knowledge Base
 
-## Guarantee and Certification
+## 2. Presencia Nacional
 
-### 360-Point Inspection
+Actualmente, Kavak cuenta con **15 sedes** y **13 centros de inspección**, cubriendo las principales ciudades del país.
 
-All cars sold through Kavak undergo a comprehensive 360-point inspection. This ensures quality.
+### 2.1 Puebla
 
-### Warranty
+**Kavak Explanada**
+Calle Ignacio Allende 512, Santiago Momoxpan, Puebla, 72760
+Horario: Lunes a Domingo, 9:00 a.m. – 6:00 p.m.
 
-Kavak offers a warranty on all certified vehicles. The warranty covers major mechanical components.
+## 4. Autos 100% Certificados
 
-## Return Policy
+Todos los autos pasan por una **inspección integral** realizada por especialistas, que evalúan:
 
-### 7-Day Return Guarantee
+* Exterior.
+* Interior.
+* Motor y componentes mecánicos.
 
-Kavak offers a 7-day return guarantee. If you're not satisfied, you can return the vehicle within 7 days.
+Esto garantiza el estándar de calidad del sello **Kavak**.
 
-## Delivery
+## 8. Periodo de Prueba y Garantía
 
-### Home Delivery
-
-Kavak offers home delivery service for your convenience.
+* **7 días o 300 km** de prueba.
+* Devolución garantizada si el auto no convence.
+* **Garantía de 3 meses**, con opción de extender hasta 1 año.
 """  # noqa: E501
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
         f.write(content)
         f.flush()
         yield Path(f.name)
@@ -52,10 +56,10 @@ def test_retrieve_returns_relevant_chunks_for_guarantee_query(sample_knowledge_b
     chunks = repo.retrieve("garantía", top_k=3)
 
     assert len(chunks) > 0
-    # At least one chunk should have warranty/guarantee content
+    # At least one chunk should have warranty/guarantee content (in Spanish)
     chunk_texts = [chunk.text.lower() for chunk in chunks]
-    has_warranty_content = any("warranty" in text or "guarantee" in text for text in chunk_texts)
-    assert has_warranty_content, f"Expected warranty/guarantee content in chunks: {chunk_texts}"
+    has_warranty_content = any("garantía" in text or "garantia" in text for text in chunk_texts)
+    assert has_warranty_content, f"Expected garantía content in chunks: {chunk_texts}"
     # Top chunk should have positive score
     assert chunks[0].score >= 0
 
@@ -66,31 +70,34 @@ def test_retrieve_returns_relevant_chunks_for_inspection_query(sample_knowledge_
     chunks = repo.retrieve("inspección", top_k=3)
 
     assert len(chunks) > 0
-    # At least one chunk should have inspection content
+    # At least one chunk should have inspection content (in Spanish)
     chunk_texts = [chunk.text.lower() for chunk in chunks]
-    has_inspection_content = any("inspection" in text for text in chunk_texts)
-    assert has_inspection_content, f"Expected inspection content in chunks: {chunk_texts}"
+    has_inspection_content = any(
+        "inspección" in text or "inspeccion" in text for text in chunk_texts
+    )
+    assert has_inspection_content, f"Expected inspección content in chunks: {chunk_texts}"
     assert chunks[0].score >= 0
 
 
-def test_retrieve_returns_relevant_chunks_for_delivery_query(sample_knowledge_base):
-    """Test that retrieval returns relevant chunks for delivery query."""
+def test_retrieve_returns_relevant_chunks_for_sedes_query(sample_knowledge_base):
+    """Test that retrieval returns relevant chunks for sedes/location query."""
     repo = LocalMarkdownKnowledgeBaseRepository(str(sample_knowledge_base))
-    # Use "delivery" directly to match the English content in the fixture
-    chunks = repo.retrieve("delivery", top_k=3)
+    chunks = repo.retrieve("sedes", top_k=3)
 
     assert len(chunks) > 0
-    # At least one chunk should have delivery content
+    # At least one chunk should have sedes/location content (in Spanish)
     chunk_texts = [chunk.text.lower() for chunk in chunks]
-    has_delivery_content = any("delivery" in text for text in chunk_texts)
-    assert has_delivery_content, f"Expected delivery content in chunks: {chunk_texts}"
+    has_sedes_content = any(
+        "sedes" in text or "puebla" in text or "ubicación" in text for text in chunk_texts
+    )
+    assert has_sedes_content, f"Expected sedes content in chunks: {chunk_texts}"
     assert chunks[0].score >= 0
 
 
 def test_retrieve_returns_chunks_sorted_by_score(sample_knowledge_base):
     """Test that retrieved chunks are sorted by score (highest first)."""
     repo = LocalMarkdownKnowledgeBaseRepository(str(sample_knowledge_base))
-    chunks = repo.retrieve("warranty guarantee", top_k=5)
+    chunks = repo.retrieve("garantía", top_k=5)
 
     if len(chunks) > 1:
         # Scores should be in descending order
@@ -126,7 +133,7 @@ def test_retrieve_handles_empty_query(sample_knowledge_base):
 def test_chunks_have_required_fields(sample_knowledge_base):
     """Test that retrieved chunks have all required fields."""
     repo = LocalMarkdownKnowledgeBaseRepository(str(sample_knowledge_base))
-    chunks = repo.retrieve("warranty", top_k=1)
+    chunks = repo.retrieve("garantía", top_k=1)
 
     if chunks:
         chunk = chunks[0]
@@ -136,3 +143,30 @@ def test_chunks_have_required_fields(sample_knowledge_base):
         assert chunk.source is not None
         assert isinstance(chunk.score, float)
         assert 0.0 <= chunk.score <= 1.0
+
+
+def test_retrieve_sedes_from_curated_kb():
+    """Test that sedes queries retrieve chunks from the actual curated knowledge base."""
+    # Use the actual curated KB file
+    from pathlib import Path
+
+    project_root = Path(__file__).parent.parent.parent.parent.parent.parent
+    kb_path = project_root / "data" / "knowledge_base.md"
+
+    if not kb_path.exists():
+        pytest.skip("Curated knowledge base file not found")
+
+    repo = LocalMarkdownKnowledgeBaseRepository(str(kb_path))
+
+    # Test various sedes-related queries
+    for query in ["sedes", "ubicación", "centros kavak", "dónde están", "puebla", "monterrey"]:
+        chunks = repo.retrieve(query, top_k=5)
+        assert len(chunks) > 0, f"Query '{query}' should return at least one chunk"
+        # Verify chunks contain Spanish content about locations
+        chunk_texts = " ".join([chunk.text.lower() for chunk in chunks])
+        assert (
+            "sedes" in chunk_texts
+            or "puebla" in chunk_texts
+            or "monterrey" in chunk_texts
+            or "ciudad" in chunk_texts
+        ), f"Query '{query}' should return chunks about locations/sedes"

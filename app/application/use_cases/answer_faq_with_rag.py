@@ -81,159 +81,73 @@ class AnswerFaqWithRag:
         Format chunk text as a Spanish answer.
 
         Args:
-            text: Chunk text (in English)
+            text: Chunk text (already in Spanish from curated KB)
 
         Returns:
-            Formatted Spanish answer
+            Formatted Spanish answer using KB content directly
         """
-        # Simple translation/mapping for common FAQ topics
-        # This is deterministic and based on keywords in the text
+        # The knowledge base is already in Spanish, so we use the content directly
+        # Extract the most relevant information from the chunk
+        # Remove markdown formatting and clean up the text
 
-        text_lower = text.lower()
+        # Remove markdown heading markers
+        text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
 
-        # Guarantee/Warranty
-        if "warranty" in text_lower or "guarantee" in text_lower:
-            if "7-day" in text_lower or "7 day" in text_lower:
-                return (
-                    "Kavak ofrece una garantía de devolución de 7 días. "
-                    "Si no estás satisfecho con tu compra, puedes devolver el vehículo "
-                    "dentro de 7 días para un reembolso completo. El proceso de devolución "
-                    "es simple: solo contacta a nuestro equipo de servicio al cliente."
-                )
-            else:
-                return (
-                    "Kavak ofrece garantía en todos los vehículos certificados. "
-                    "La garantía cubre componentes mecánicos principales y te da tranquilidad al comprar."
-                )
+        # Remove horizontal rules
+        text = re.sub(r"^---+\s*$", "", text, flags=re.MULTILINE)
 
-        # Inspection
-        if "inspection" in text_lower:
-            if "360" in text_lower:
-                return (
-                    "Todos los autos vendidos a través de Kavak pasan por una inspección "
-                    "completa de 360 puntos. Esto asegura que cada vehículo cumple con nuestros "
-                    "estándares de calidad antes de ser listado. Recibirás un reporte detallado "
-                    "de inspección mostrando la condición del vehículo."
-                )
-            else:
-                return (
-                    "Cada auto es inspeccionado antes de ser listado. Nuestros mecánicos certificados "
-                    "revisan todos los sistemas y componentes principales. Solo los vehículos que "
-                    "pasan nuestra inspección son certificados y listados para venta."
-                )
+        # Clean up extra whitespace
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        text = text.strip()
 
-        # Delivery
-        if "delivery" in text_lower:
-            return (
-                "Kavak ofrece servicio de entrega a domicilio para tu conveniencia. "
-                "Podemos entregar tu auto certificado directamente en tu ubicación. "
-                "También puedes recoger tu vehículo en una de nuestras ubicaciones físicas. "
-                "Los tiempos de entrega varían por ubicación, típicamente de 3 a 7 días hábiles "
-                "después de la confirmación de compra."
-            )
+        # Extract first paragraph or meaningful section (up to ~300 chars for concise answer)
+        paragraphs = text.split("\n\n")
+        if paragraphs:
+            # Use first paragraph if it's reasonable length
+            first_paragraph = paragraphs[0].strip()
+            if len(first_paragraph) > 50 and len(first_paragraph) < 400:
+                return first_paragraph
 
-        # Financing
-        if "financing" in text_lower:
-            return (
-                "Kavak ofrece opciones de financiamiento flexibles con tasas de interés competitivas. "
-                "Puedes financiar tu compra con plazos que van de 36 a 72 meses. "
-                "El enganche mínimo es típicamente del 10% del precio del vehículo. "
-                "El proceso de aprobación es rápido y a menudo se puede completar en línea."
-            )
+            # Otherwise, take first few sentences
+            sentences = re.split(r"[.!?]\s+", text)
+            answer_parts = []
+            char_count = 0
+            for sentence in sentences:
+                if char_count + len(sentence) > 300:
+                    break
+                answer_parts.append(sentence.strip())
+                char_count += len(sentence) + 2
 
-        # Certification
-        if "certified" in text_lower or "certification" in text_lower:
-            return (
-                "Cada auto viene con una certificación que garantiza su condición. "
-                "Verificamos aspectos mecánicos, eléctricos y cosméticos de cada vehículo. "
-                "Todos los autos pasan por nuestra inspección de 360 puntos antes de ser certificados."
-            )
+            if answer_parts:
+                answer = ". ".join(answer_parts)
+                if not answer.endswith((".", "!", "?")):
+                    answer += "."
+                return answer
 
-        # Safety/Security
-        if "safety" in text_lower or "security" in text_lower or "secure" in text_lower:
-            return (
-                "Kavak garantiza transacciones seguras. Todos los vendedores están verificados. "
-                "Utilizamos procesamiento de pagos seguro y todas las transacciones financieras "
-                "están protegidas y encriptadas. Todos los vehículos vienen con documentación legal adecuada."
-            )
-
-        # Return policy
-        if "return" in text_lower:
-            return (
-                "Kavak ofrece una garantía de devolución de 7 días. Si no estás satisfecho con tu compra, "
-                "puedes devolver el vehículo dentro de 7 días para un reembolso completo. "
-                "El proceso de devolución es simple: contacta a nuestro equipo de servicio al cliente."
-            )
-
-        # Default: use chunk content with key term translation
-        # This ensures we use information from retrieved chunks (requirement)
-        default_mapping = {
-            "kavak": "Kavak",
-            "mexico": "México",
-            "leading": "líder",
-            "platform": "plataforma",
-            "buying": "compra",
-            "selling": "venta",
-            "certified": "certificado",
-            "certification": "certificación",
-            "used cars": "autos usados",
-            "safe": "seguro",
-            "transparent": "transparente",
-            "convenient": "conveniente",
-            "quality": "calidad",
-            "standards": "estándares",
-            "vehicle": "vehículo",
-            "vehicles": "vehículos",
-            "car": "auto",
-            "cars": "autos",
-            "offer": "ofrecemos",
-            "offers": "ofrecemos",
-            "ensure": "aseguramos",
-            "ensures": "aseguramos",
-        }
-
-        # Extract first meaningful sentence from chunk
-        sentences = re.split(r"[.!?]\s+", text.strip())
-        first_sentence = sentences[0] if sentences and sentences[0] else text[:200]
-
-        # Replace known key terms in the sentence (case-insensitive, whole word only)
-        translated_sentence = first_sentence
-        # Sort by length (longest first) to match phrases before single words
-        sorted_terms = sorted(default_mapping.items(), key=lambda x: len(x[0]), reverse=True)
-
-        for english_term, spanish_term in sorted_terms:
-            # Replace whole words only (case-insensitive)
-            pattern = r"\b" + re.escape(english_term) + r"\b"
-            translated_sentence = re.sub(
-                pattern, spanish_term, translated_sentence, flags=re.IGNORECASE
-            )
-
-        # Return answer using the translated chunk content
-        return (
-            f"Basándome en nuestra información: {translated_sentence}. "
-            "¿Hay algún aspecto específico que te gustaría conocer más?"
-        )
+        # Fallback: return first 300 characters
+        return text[:300].strip() + ("..." if len(text) > 300 else "")
 
     def _extract_key_point(self, text: str) -> str:
         """
         Extract a key point from chunk text for supplementary information.
 
         Args:
-            text: Chunk text
+            text: Chunk text (in Spanish from curated KB)
 
         Returns:
-            Key point in Spanish, or empty string if none found
+            Key point in Spanish extracted from KB content, or empty string if none found
         """
-        text_lower = text.lower()
+        # Extract a concise key point from the Spanish KB content
+        # Remove markdown and get first meaningful sentence
+        text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+        text = text.strip()
 
-        if "warranty" in text_lower:
-            return "todos los vehículos certificados incluyen garantía"
-        if "inspection" in text_lower:
-            return "cada auto pasa por una inspección completa antes de ser certificado"
-        if "delivery" in text_lower:
-            return "ofrecemos entrega a domicilio y recogida en nuestras ubicaciones"
-        if "financing" in text_lower:
-            return "tenemos opciones de financiamiento flexibles disponibles"
+        # Get first sentence that's not too short
+        sentences = re.split(r"[.!?]\s+", text)
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if len(sentence) > 30:  # Meaningful length
+                return sentence
 
         return ""
 
