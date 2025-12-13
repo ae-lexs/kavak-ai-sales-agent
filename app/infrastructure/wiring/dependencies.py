@@ -1,5 +1,7 @@
 """Dependency injection factory functions."""
 
+from typing import Optional
+
 from app.adapters.outbound.catalog.csv_car_catalog_repository import (
     CSVCarCatalogRepository,
 )
@@ -7,6 +9,7 @@ from app.adapters.outbound.knowledge_base.local_markdown_knowledge_base_reposito
     LocalMarkdownKnowledgeBaseRepository,
 )
 from app.adapters.outbound.lead.lead_repository import InMemoryLeadRepository
+from app.adapters.outbound.llm.openai_llm_client import OpenAILLMClient
 from app.adapters.outbound.state.conversation_state_repository import (
     InMemoryConversationStateRepository,
 )
@@ -14,8 +17,10 @@ from app.application.ports.car_catalog_repository import CarCatalogRepository
 from app.application.ports.conversation_state_repository import ConversationStateRepository
 from app.application.ports.knowledge_base_repository import KnowledgeBaseRepository
 from app.application.ports.lead_repository import LeadRepository
+from app.application.ports.llm_client import LLMClient
 from app.application.use_cases.answer_faq_with_rag import AnswerFaqWithRag
 from app.application.use_cases.handle_chat_turn_use_case import HandleChatTurnUseCase
+from app.infrastructure.config.settings import settings
 from app.infrastructure.logging.logger import log_turn
 
 
@@ -49,6 +54,24 @@ def create_knowledge_base_repository() -> KnowledgeBaseRepository:
     return LocalMarkdownKnowledgeBaseRepository()
 
 
+def create_llm_client() -> Optional[LLMClient]:
+    """
+    Factory function to create LLM client if enabled.
+
+    Returns:
+        LLMClient instance if enabled, None otherwise
+    """
+    if not settings.llm_enabled:
+        return None
+
+    try:
+        return OpenAILLMClient()
+    except (ValueError, Exception):
+        # If API key is missing or client creation fails, return None
+        # This allows the use case to fall back to deterministic responses
+        return None
+
+
 def create_faq_rag_service() -> AnswerFaqWithRag:
     """
     Factory function to create FAQ RAG service.
@@ -57,7 +80,8 @@ def create_faq_rag_service() -> AnswerFaqWithRag:
         AnswerFaqWithRag instance
     """
     knowledge_base_repository = create_knowledge_base_repository()
-    return AnswerFaqWithRag(knowledge_base_repository)
+    llm_client = create_llm_client()
+    return AnswerFaqWithRag(knowledge_base_repository, llm_client=llm_client)
 
 
 def create_lead_repository() -> LeadRepository:

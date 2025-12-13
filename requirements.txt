@@ -12,6 +12,9 @@ python-dotenv>=1.0.0,<2.0.0  # Environment variable management
 # ASGI server
 uvicorn[standard]>=0.24.0,<1.0.0
 
+# LLM integration
+openai>=1.12.0,<2.0.0
+
 # Note: Twilio WhatsApp integration uses standard library modules only
 # (hmac, hashlib, base64, urllib.parse) - no additional packages required
 
