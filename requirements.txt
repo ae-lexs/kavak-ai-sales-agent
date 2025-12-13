@@ -2,6 +2,7 @@
 
 # Web framework
 fastapi>=0.104.0,<1.0.0
+python-multipart>=0.0.6,<1.0.0  # Required for form data (Twilio webhook)
 
 # Data validation and settings
 pydantic>=2.5.0,<3.0.0
@@ -9,4 +10,7 @@ pydantic-settings>=2.1.0,<3.0.0
 
 # ASGI server
 uvicorn[standard]>=0.24.0,<1.0.0
+
+# Note: Twilio WhatsApp integration uses standard library modules only
+# (hmac, hashlib, base64, urllib.parse) - no additional packages required
 

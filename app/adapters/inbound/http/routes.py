@@ -2,11 +2,11 @@
 
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Form, HTTPException, Request, Response, status
 
-from app.adapters.inbound.http.schemas import (
-    TwilioWebhookRequest,
-    WhatsAppWebhookResponse,
+from app.adapters.inbound.http.twilio_utils import (
+    generate_twiml_response,
+    validate_twilio_signature,
 )
 from app.application.dtos.chat import ChatRequest, ChatResponse
 from app.infrastructure.config.settings import settings
@@ -78,34 +78,71 @@ async def chat(request: ChatRequest) -> ChatResponse:
     return response
 
 
-@router.post(
-    "/channels/whatsapp/webhook",
-    status_code=status.HTTP_200_OK,
-    response_model=WhatsAppWebhookResponse,
-)
-async def whatsapp_webhook(request: TwilioWebhookRequest) -> WhatsAppWebhookResponse:
+@router.post("/channels/whatsapp/webhook")
+async def whatsapp_webhook(
+    request: Request,
+    From: str = Form(...),
+    Body: str = Form(...),
+    ProfileName: str = Form(None),
+    MessageSid: str = Form(None),
+) -> Response:
     """
     Handle WhatsApp webhook requests from Twilio.
 
-    Maps Twilio webhook payload to internal chat flow and returns simplified response.
+    Accepts form-encoded data from Twilio and returns TwiML XML response.
+    Maps Twilio webhook payload to internal chat flow.
 
     Args:
-        request: Twilio webhook payload with From, Body, and optional ProfileName
+        request: FastAPI request object (for signature validation)
+        From: Phone number (used as session_id)
+        Body: Message text
+        ProfileName: Optional WhatsApp profile name
+        MessageSid: Optional Twilio message SID
 
     Returns:
-        Simplified WhatsApp response with session_id and reply
+        TwiML XML response with Spanish reply
     """
+    # Validate Twilio signature if enabled
+    # Build full URL for signature validation
+    url = str(request.url)
+    form_data = {
+        "From": From,
+        "Body": Body,
+    }
+    if ProfileName:
+        form_data["ProfileName"] = ProfileName
+    if MessageSid:
+        form_data["MessageSid"] = MessageSid
+
+    try:
+        if not validate_twilio_signature(request, url, form_data):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid Twilio signature",
+            )
+    except HTTPException:
+        raise
+    except Exception as err:
+        # If signature validation fails for other reasons and it's enabled, fail
+        if settings.twilio_validate_signature:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Twilio signature validation failed",
+            ) from err
+
     # Generate turn_id for request correlation
     turn_id = str(uuid4())
 
     # Map Twilio payload to ChatRequest
     metadata = {}
-    if request.ProfileName:
-        metadata["profile_name"] = request.ProfileName
+    if ProfileName:
+        metadata["profile_name"] = ProfileName
+    if MessageSid:
+        metadata["message_sid"] = MessageSid
 
     chat_request = ChatRequest(
-        session_id=request.From,
-        message=request.Body,
+        session_id=From,
+        message=Body,
         channel="whatsapp",
         metadata=metadata if metadata else None,
     )
@@ -120,21 +157,25 @@ async def whatsapp_webhook(request: TwilioWebhookRequest) -> WhatsAppWebhookResp
     )
 
     # Execute use case (same as /chat endpoint)
-    response = await _handle_chat_turn_use_case.execute(chat_request, turn_id=turn_id)
+    chat_response = await _handle_chat_turn_use_case.execute(chat_request, turn_id=turn_id)
 
     # Log response
     log_turn(
         session_id=chat_request.session_id,
         turn_id=turn_id,
         component="whatsapp_webhook",
-        next_action=response.next_action,
-        reply_length=len(response.reply),
+        next_action=chat_response.next_action,
+        reply_length=len(chat_response.reply),
     )
 
-    # Return simplified response for WhatsApp
-    return WhatsAppWebhookResponse(
-        session_id=response.session_id,
-        reply=response.reply,
+    # Generate TwiML response
+    twiml = generate_twiml_response(chat_response.reply)
+
+    # Return TwiML XML response
+    return Response(
+        content=twiml,
+        media_type="application/xml",
+        status_code=status.HTTP_200_OK,
     )
 
 
