@@ -293,17 +293,33 @@ For local development, you'll need to expose your local server using a tunnel se
 
 ### Environment Variables
 
-Optional environment variables for Twilio integration:
+The application uses python-dotenv to load environment variables from a `.env` file. Copy `.env.example` to `.env` and fill in your values:
 
 ```bash
-# Twilio Auth Token (for signature validation)
-TWILIO_AUTH_TOKEN=your_auth_token_here
-
-# Enable signature validation (default: false)
-TWILIO_VALIDATE_SIGNATURE=true
+cp .env.example .env
 ```
 
-**Note**: Signature validation is disabled by default for local development. Enable it in production for security.
+Required/optional environment variables:
+
+```bash
+# Application Configuration
+DEBUG_MODE=false
+STATE_TTL_SECONDS=86400
+
+# Twilio Configuration
+# Get these from your Twilio Console: https://console.twilio.com
+TWILIO_ACCOUNT_SID=your_account_sid_here
+TWILIO_AUTH_TOKEN=your_auth_token_here
+TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
+
+# Enable signature validation (default: false)
+TWILIO_VALIDATE_SIGNATURE=false
+```
+
+**Note**: 
+- Signature validation is disabled by default for local development. Enable it in production for security.
+- Never commit `.env` to version control (it's in `.gitignore`).
+- The `.env.example` file shows all available configuration options.
 
 ### Webhook Endpoint Details
 
