@@ -25,10 +25,17 @@ class OpenAILLMClient(LLMClient):
             model: Model name (defaults to settings.openai_model)
             timeout_seconds: Request timeout in seconds (defaults to settings.openai_timeout_seconds)
         """
-        self._api_key = api_key or settings.openai_api_key
+        # Use provided values or fall back to settings
+        # For api_key, explicitly check if None was passed (allowing empty string to be checked)
+        if api_key is not None:
+            self._api_key = api_key
+        else:
+            self._api_key = settings.openai_api_key
+
         self._model = model or settings.openai_model
         self._timeout = timeout_seconds or settings.openai_timeout_seconds
 
+        # Check if API key is missing or empty
         if not self._api_key:
             raise ValueError("OpenAI API key is required")
 
