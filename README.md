@@ -63,13 +63,26 @@ chmod +x scripts/demo.sh
 ./scripts/demo.sh
 ```
 
-The demo script simulates a full conversation flow in Spanish (need → budget → options → financing).
+The demo script simulates a full conversation flow in Spanish (need → budget → options → financing → lead capture).
+
+## Features
+
+- **Commercial Flow**: Guided conversation to understand customer needs, budget, preferences, and financing requirements
+- **Car Catalog Search**: Search and recommend cars from CSV catalog based on customer criteria
+- **Financing Calculator**: Calculate financing plans with multiple terms (36, 48, 60, 72 months)
+- **FAQ RAG**: Answer frequently asked questions using Retrieval-Augmented Generation (RAG) from knowledge base
+- **Lead Capture**: Capture customer contact information (name, phone, preferred contact time) when they express purchase intent
+- **Spanish Language Support**: All user-facing messages are in Spanish
+- **Clean Architecture**: Well-structured codebase following Ports & Adapters pattern
 
 ### Available Make Targets
 
 - `make dev` - Run FastAPI development server with auto-reload
-- `make test` - Run test suite
-- `make lint` - Check code formatting and linting
+- `make test` - Run test suite with minimal output
+- `make test_coverage` - Run tests with coverage report
+- `make lint` - Check code formatting and linting (read-only)
+- `make format_fix` - Automatically format code
+- `make lint_fix` - Automatically fix linting issues
 
 ## Architecture
 
@@ -85,16 +98,18 @@ app/
 │
 ├── application/         # Application business logic
 │   ├── use_cases/       # Application use cases
-│   ├── dtos/            # Data Transfer Objects
+│   ├── dtos/            # Data Transfer Objects (Car, Chat, Financing, Lead, Knowledge)
 │   └── ports/           # Interfaces (ports) for adapters
 │
 ├── adapters/            # Adapters (implementations)
 │   ├── inbound/         # Primary adapters (driving)
 │   │   └── http/        # HTTP/FastAPI routes
 │   └── outbound/        # Secondary adapters (driven)
-│       ├── catalog_csv/ # CSV catalog adapter
-│       ├── llm_rag/     # LLM/RAG adapter
-│       └── persistence/ # Database/persistence adapter
+│       ├── catalog/     # Car catalog adapter (CSV)
+│       ├── knowledge_base/ # Knowledge base adapter (Markdown)
+│       ├── lead/        # Lead repository adapter (in-memory)
+│       ├── state/       # Conversation state adapter (in-memory)
+│       └── llm_rag/     # LLM/RAG adapter
 │
 ├── infrastructure/      # Infrastructure concerns
 │   ├── config/          # Configuration management
@@ -195,6 +210,16 @@ The application will be available at `http://localhost:8000`
 - API documentation: `http://localhost:8000/docs`
 - Health check: `http://localhost:8000/health`
 - Chat endpoint: `POST http://localhost:8000/chat`
+
+### Debug Endpoints
+
+When `DEBUG_MODE=true` is set in your environment, additional debug endpoints are available:
+
+- `GET /debug/session/{session_id}` - Get conversation state for a session
+- `POST /debug/session/{session_id}/reset` - Reset conversation state for a session
+- `GET /debug/leads` - List all captured leads (requires DEBUG_MODE=true)
+
+**Note:** Debug endpoints are disabled by default for security reasons. To enable them, set `DEBUG_MODE=true` in your environment or `.env` file.
 
 ### Running in production
 

@@ -11,7 +11,7 @@ from app.application.dtos.chat import ChatRequest
 from app.application.use_cases.handle_chat_turn_use_case import HandleChatTurnUseCase
 from app.domain.entities.conversation_state import ConversationState
 from app.infrastructure.config.settings import settings
-from tests.unit.test_handle_chat_turn_use_case import (
+from tests.unit.use_cases.test_handle_chat_turn_use_case import (
     MockCarCatalogRepository,
     MockConversationStateRepository,
 )
