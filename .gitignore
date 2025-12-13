@@ -22,6 +22,7 @@ dist/
 .coverage
 .coverage.*
 htmlcov/
+coverage.json
 
 # =========================
 # Logs
