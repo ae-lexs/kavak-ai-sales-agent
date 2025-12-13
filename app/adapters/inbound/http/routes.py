@@ -4,6 +4,10 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, status
 
+from app.adapters.inbound.http.schemas import (
+    TwilioWebhookRequest,
+    WhatsAppWebhookResponse,
+)
 from app.application.dtos.chat import ChatRequest, ChatResponse
 from app.infrastructure.config.settings import settings
 from app.infrastructure.logging.logger import log_turn
@@ -72,6 +76,66 @@ async def chat(request: ChatRequest) -> ChatResponse:
     )
 
     return response
+
+
+@router.post(
+    "/channels/whatsapp/webhook",
+    status_code=status.HTTP_200_OK,
+    response_model=WhatsAppWebhookResponse,
+)
+async def whatsapp_webhook(request: TwilioWebhookRequest) -> WhatsAppWebhookResponse:
+    """
+    Handle WhatsApp webhook requests from Twilio.
+
+    Maps Twilio webhook payload to internal chat flow and returns simplified response.
+
+    Args:
+        request: Twilio webhook payload with From, Body, and optional ProfileName
+
+    Returns:
+        Simplified WhatsApp response with session_id and reply
+    """
+    # Generate turn_id for request correlation
+    turn_id = str(uuid4())
+
+    # Map Twilio payload to ChatRequest
+    metadata = {}
+    if request.ProfileName:
+        metadata["profile_name"] = request.ProfileName
+
+    chat_request = ChatRequest(
+        session_id=request.From,
+        message=request.Body,
+        channel="whatsapp",
+        metadata=metadata if metadata else None,
+    )
+
+    # Log incoming request
+    log_turn(
+        session_id=chat_request.session_id,
+        turn_id=turn_id,
+        component="whatsapp_webhook",
+        message_length=len(chat_request.message),
+        channel=chat_request.channel,
+    )
+
+    # Execute use case (same as /chat endpoint)
+    response = await _handle_chat_turn_use_case.execute(chat_request, turn_id=turn_id)
+
+    # Log response
+    log_turn(
+        session_id=chat_request.session_id,
+        turn_id=turn_id,
+        component="whatsapp_webhook",
+        next_action=response.next_action,
+        reply_length=len(response.reply),
+    )
+
+    # Return simplified response for WhatsApp
+    return WhatsAppWebhookResponse(
+        session_id=response.session_id,
+        reply=response.reply,
+    )
 
 
 @router.get("/debug/session/{session_id}", status_code=status.HTTP_200_OK)

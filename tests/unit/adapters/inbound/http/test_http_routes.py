@@ -297,3 +297,82 @@ async def test_chat_endpoint_empty_message(client):
     )
     # Should still process (empty messages are valid)
     assert response.status_code == status.HTTP_200_OK
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_webhook_success(client):
+    """Test WhatsApp webhook endpoint with Twilio-like payload."""
+    response = client.post(
+        "/channels/whatsapp/webhook",
+        json={
+            "From": "+521234567890",
+            "Body": "Hola",
+            "ProfileName": "Juan Pérez",
+        },
+    )
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    # Should return simplified response
+    assert "session_id" in data
+    assert "reply" in data
+    assert data["session_id"] == "+521234567890"
+    # Reply should be in Spanish
+    assert isinstance(data["reply"], str)
+    assert len(data["reply"]) > 0
+    # Should not include full ChatResponse fields
+    assert "next_action" not in data
+    assert "suggested_questions" not in data
+    assert "debug" not in data
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_webhook_without_profile_name(client):
+    """Test WhatsApp webhook endpoint without ProfileName."""
+    response = client.post(
+        "/channels/whatsapp/webhook",
+        json={
+            "From": "+529876543210",
+            "Body": "Estoy buscando un auto familiar",
+        },
+    )
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["session_id"] == "+529876543210"
+    assert "reply" in data
+    # Reply should be in Spanish
+    assert isinstance(data["reply"], str)
+    assert len(data["reply"]) > 0
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_webhook_uses_same_use_case(client):
+    """Test that WhatsApp webhook uses the same use case as /chat endpoint."""
+    session_id = "+521111111111"
+    message = "Necesito un auto familiar"
+
+    # Test via WhatsApp webhook
+    whatsapp_response = client.post(
+        "/channels/whatsapp/webhook",
+        json={
+            "From": session_id,
+            "Body": message,
+        },
+    )
+    assert whatsapp_response.status_code == status.HTTP_200_OK
+    whatsapp_data = whatsapp_response.json()
+
+    # Test via regular chat endpoint with same session and message
+    chat_response = client.post(
+        "/chat",
+        json={
+            "session_id": session_id,
+            "message": message,
+            "channel": "whatsapp",
+        },
+    )
+    assert chat_response.status_code == status.HTTP_200_OK
+    chat_data = chat_response.json()
+
+    # Both should produce the same reply (same use case, same state)
+    assert whatsapp_data["reply"] == chat_data["reply"]
+    assert whatsapp_data["session_id"] == chat_data["session_id"]

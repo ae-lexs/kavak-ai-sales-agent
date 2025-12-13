@@ -57,6 +57,19 @@ curl -X POST http://localhost:8000/chat \
   }'
 ```
 
+**WhatsApp webhook endpoint:**
+```bash
+curl -X POST http://localhost:8000/channels/whatsapp/webhook \
+  -H "Content-Type: application/json" \
+  -d '{
+    "From": "+521234567890",
+    "Body": "Hola",
+    "ProfileName": "Juan Pérez"
+  }'
+```
+
+The webhook accepts Twilio-like payloads and maps them to the internal chat flow. The `From` field is used as the session ID, `Body` as the message, and `ProfileName` (optional) is stored in metadata.
+
 **Run the demo script:**
 ```bash
 chmod +x scripts/demo.sh
@@ -72,6 +85,7 @@ The demo script simulates a full conversation flow in Spanish (need → budget �
 - **Financing Calculator**: Calculate financing plans with multiple terms (36, 48, 60, 72 months)
 - **FAQ RAG**: Answer frequently asked questions using Retrieval-Augmented Generation (RAG) from knowledge base
 - **Lead Capture**: Capture customer contact information (name, phone, preferred contact time) when they express purchase intent
+- **WhatsApp Integration**: Webhook endpoint for Twilio/WhatsApp integration (`/channels/whatsapp/webhook`)
 - **Spanish Language Support**: All user-facing messages are in Spanish
 - **Clean Architecture**: Well-structured codebase following Ports & Adapters pattern
 
@@ -210,6 +224,7 @@ The application will be available at `http://localhost:8000`
 - API documentation: `http://localhost:8000/docs`
 - Health check: `http://localhost:8000/health`
 - Chat endpoint: `POST http://localhost:8000/chat`
+- WhatsApp webhook: `POST http://localhost:8000/channels/whatsapp/webhook`
 
 ### Debug Endpoints
 
