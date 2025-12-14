@@ -47,6 +47,7 @@ services:
       - STATE_TTL_SECONDS=${STATE_TTL_SECONDS:-86400}
       - CONVERSATION_STATE_REPOSITORY=${CONVERSATION_STATE_REPOSITORY:-postgres}
       - LEAD_REPOSITORY=${LEAD_REPOSITORY:-postgres}
+      - STATE_CACHE=${STATE_CACHE:-redis}
       - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg2://postgres:postgres@db:5432/kavak_agent}
       
       # Twilio Configuration (optional)

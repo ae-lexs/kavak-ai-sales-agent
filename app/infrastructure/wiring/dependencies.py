@@ -9,6 +9,12 @@ from app.adapters.outbound.conversation_state_repository import (
     InMemoryConversationStateRepository,
     PostgresConversationStateRepository,
 )
+from app.adapters.outbound.conversation_state_repository.cached_conversation_state_repository import (  # noqa: E501
+    CachedConversationStateRepository,
+)
+from app.adapters.outbound.conversation_state_repository.redis_conversation_state_cache import (
+    RedisConversationStateCache,
+)
 from app.adapters.outbound.idempotency.noop_idempotency_store import NoOpIdempotencyStore
 from app.adapters.outbound.idempotency.redis_idempotency_store import RedisIdempotencyStore
 from app.adapters.outbound.knowledge_base.local_markdown_knowledge_base_repository import (
@@ -36,14 +42,28 @@ def create_conversation_state_repository() -> ConversationStateRepository:
     Factory function to create conversation state repository.
 
     Returns:
-        ConversationStateRepository instance
+        ConversationStateRepository instance (with optional Redis cache)
     """
+    # Create primary repository (source of truth)
     if settings.conversation_state_repository == "postgres":
         if not settings.database_url:
             raise ValueError("DATABASE_URL is required when CONVERSATION_STATE_REPOSITORY=postgres")
-        return PostgresConversationStateRepository()
+        primary_repo = PostgresConversationStateRepository()
     else:
-        return InMemoryConversationStateRepository()
+        primary_repo = InMemoryConversationStateRepository()
+
+    # Wrap with cache if enabled
+    if settings.state_cache == "redis":
+        if not settings.redis_url:
+            # If cache is enabled but Redis URL is not configured, skip caching
+            return primary_repo
+
+        cache = RedisConversationStateCache(
+            redis_url=settings.redis_url, ttl_seconds=settings.state_ttl_seconds
+        )
+        return CachedConversationStateRepository(primary_repo, cache)
+
+    return primary_repo
 
 
 def create_car_catalog_repository() -> CarCatalogRepository:
