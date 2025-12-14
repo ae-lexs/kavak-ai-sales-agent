@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     debug_mode: bool = False
     state_ttl_seconds: int = 86400  # 24 hours default
     conversation_state_repository: str = "in_memory"  # in_memory or postgres
+    state_cache: str = "none"  # none or redis
     lead_repository: str = "in_memory"  # in_memory or postgres
     database_url: str = (
         ""  # Required when conversation_state_repository=postgres or lead_repository=postgres

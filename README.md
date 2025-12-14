@@ -307,6 +307,7 @@ All environment variables can be passed to the container:
 - `TWILIO_IDEMPOTENCY_TTL_SECONDS` - Idempotency TTL in seconds (default: `3600`)
 - `CONVERSATION_STATE_REPOSITORY` - Conversation state repository backend: `in_memory` (default) or `postgres`
 - `DATABASE_URL` - PostgreSQL connection string (required when `CONVERSATION_STATE_REPOSITORY=postgres`)
+- `STATE_CACHE` - Enable Redis cache for conversation state: `none` (default) or `redis`
 
 ### Database Setup (PostgreSQL)
 
@@ -344,6 +345,8 @@ The application supports two conversation state storage backends:
 The application will now use PostgreSQL to persist conversation state across restarts.
 
 **Note:** When using Docker Compose, the database service is automatically started and the `DATABASE_URL` is configured to connect to the `db` service. Set `CONVERSATION_STATE_REPOSITORY=postgres` in your `.env` file to enable PostgreSQL persistence.
+
+**State Caching:** You can optionally enable Redis caching for conversation state by setting `STATE_CACHE=redis`. This uses a cache-aside pattern where Redis acts as a read cache, reducing database queries. Postgres remains the source of truth, so state persists even if Redis is unavailable. The cache uses the same TTL as `STATE_TTL_SECONDS` (default 24 hours).
 
 **Migration Commands:**
 - `make migrate` - Apply all pending migrations
