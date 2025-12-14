@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
     openai_timeout_seconds: int = 10
+    redis_url: str = "redis://localhost:6379/0"
+    twilio_idempotency_enabled: bool = True
+    twilio_idempotency_ttl_seconds: int = 3600
 
     model_config = SettingsConfigDict(
         env_file=".env",

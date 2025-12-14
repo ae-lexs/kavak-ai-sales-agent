@@ -19,6 +19,21 @@ services:
       retries: 5
     restart: unless-stopped
 
+  redis:
+    image: redis:7-alpine
+    container_name: kavak-agent-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   kavak-agent:
     build:
       context: .
@@ -40,6 +55,11 @@ services:
       - TWILIO_WHATSAPP_NUMBER=${TWILIO_WHATSAPP_NUMBER:-}
       - TWILIO_VALIDATE_SIGNATURE=${TWILIO_VALIDATE_SIGNATURE:-false}
       
+      # Twilio Idempotency Configuration (optional)
+      - TWILIO_IDEMPOTENCY_ENABLED=${TWILIO_IDEMPOTENCY_ENABLED:-true}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - TWILIO_IDEMPOTENCY_TTL_SECONDS=${TWILIO_IDEMPOTENCY_TTL_SECONDS:-3600}
+      
       # OpenAI LLM Configuration (optional)
       - LLM_ENABLED=${LLM_ENABLED:-false}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
@@ -47,6 +67,8 @@ services:
       - OPENAI_TIMEOUT_SECONDS=${OPENAI_TIMEOUT_SECONDS:-10}
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -58,4 +80,5 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
 
