@@ -1,6 +1,6 @@
 """Unit tests for HTTP routes."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import FastAPI, status
@@ -399,3 +399,184 @@ async def test_whatsapp_webhook_uses_same_use_case(client):
 
     # Both should produce the same reply (same use case, same state)
     assert whatsapp_reply == chat_data["reply"]
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_webhook_idempotency_first_request(client):
+    """Test that first request with MessageSid processes normally and stores response."""
+    message_sid = "SM1234567890abcdef"
+
+    with patch.object(settings, "twilio_idempotency_enabled", True):
+        # Mock idempotency store to return False (not processed)
+        mock_store = AsyncMock()
+        mock_store.is_processed = AsyncMock(return_value=False)
+        mock_store.get_response = AsyncMock(return_value=None)
+        mock_store.mark_processed = AsyncMock()
+        mock_store.store_response = AsyncMock()
+
+        # Patch the module-level idempotency store
+        with patch("app.adapters.inbound.http.routes._idempotency_store", mock_store):
+            response = client.post(
+                "/channels/whatsapp/webhook",
+                data={
+                    "From": "+521234567890",
+                    "Body": "Hola",
+                    "MessageSid": message_sid,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+
+            assert response.status_code == status.HTTP_200_OK
+            assert response.headers["content-type"] == "application/xml"
+
+            # Verify idempotency check was performed
+            mock_store.is_processed.assert_called_once_with(message_sid)
+
+            # Verify response was stored
+            mock_store.mark_processed.assert_called_once()
+            mock_store.store_response.assert_called_once()
+
+            # Verify stored response contains the generated TwiML
+            stored_twiml = mock_store.store_response.call_args[0][1]
+            assert "<?xml" in stored_twiml
+            assert "<Response>" in stored_twiml
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_webhook_idempotency_duplicate_request_with_stored_response(client):
+    """Test that duplicate request with same MessageSid returns stored response."""
+    message_sid = "SM1234567890abcdef"
+    stored_twiml = '<?xml version="1.0" encoding="UTF-8"?><Response><Message>Respuesta almacenada</Message></Response>'  # noqa: E501
+
+    with patch.object(settings, "twilio_idempotency_enabled", True):
+        # Mock idempotency store to return True (processed) and stored response
+        mock_store = AsyncMock()
+        mock_store.is_processed = AsyncMock(return_value=True)
+        mock_store.get_response = AsyncMock(return_value=stored_twiml)
+
+        with patch("app.adapters.inbound.http.routes._idempotency_store", mock_store):
+            response = client.post(
+                "/channels/whatsapp/webhook",
+                data={
+                    "From": "+521234567890",
+                    "Body": "Hola de nuevo",
+                    "MessageSid": message_sid,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+
+            assert response.status_code == status.HTTP_200_OK
+            assert response.headers["content-type"] == "application/xml"
+            assert response.text == stored_twiml
+
+            # Verify idempotency check was performed
+            mock_store.is_processed.assert_called_once_with(message_sid)
+            mock_store.get_response.assert_called_once_with(message_sid)
+
+            # Verify use case was NOT executed (no mark/store calls)
+            mock_store.mark_processed.assert_not_called()
+            mock_store.store_response.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_webhook_idempotency_duplicate_request_no_stored_response(client):
+    """Test that duplicate request without stored response returns safe no-op message."""
+    message_sid = "SM1234567890abcdef"
+
+    with patch.object(settings, "twilio_idempotency_enabled", True):
+        # Mock idempotency store to return True (processed) but no stored response
+        mock_store = AsyncMock()
+        mock_store.is_processed = AsyncMock(return_value=True)
+        mock_store.get_response = AsyncMock(return_value=None)
+
+        with patch("app.adapters.inbound.http.routes._idempotency_store", mock_store):
+            response = client.post(
+                "/channels/whatsapp/webhook",
+                data={
+                    "From": "+521234567890",
+                    "Body": "Hola de nuevo",
+                    "MessageSid": message_sid,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+
+            assert response.status_code == status.HTTP_200_OK
+            assert response.headers["content-type"] == "application/xml"
+
+            # Verify response contains safe no-op message in Spanish
+            content = response.text
+            assert "<?xml" in content
+            assert "<Response>" in content
+            assert "<Message>" in content
+            # Extract message content
+            import re
+
+            message_match = re.search(r"<Message>(.*?)</Message>", content, re.DOTALL)
+            assert message_match is not None
+            reply_text = message_match.group(1)
+            assert "Mensaje recibido" in reply_text or "ayuda adicional" in reply_text.lower()
+
+            # Verify idempotency check was performed
+            mock_store.is_processed.assert_called_once_with(message_sid)
+            mock_store.get_response.assert_called_once_with(message_sid)
+
+            # Verify use case was NOT executed
+            mock_store.mark_processed.assert_not_called()
+            mock_store.store_response.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_webhook_idempotency_disabled(client):
+    """Test that when idempotency is disabled, requests always process normally."""
+    message_sid = "SM1234567890abcdef"
+
+    with patch.object(settings, "twilio_idempotency_enabled", False):
+        # Even if we have a mock store, it shouldn't be used
+        mock_store = AsyncMock()
+        mock_store.is_processed = AsyncMock(return_value=True)
+
+        with patch("app.adapters.inbound.http.routes._idempotency_store", mock_store):
+            response = client.post(
+                "/channels/whatsapp/webhook",
+                data={
+                    "From": "+521234567890",
+                    "Body": "Hola",
+                    "MessageSid": message_sid,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+
+            assert response.status_code == status.HTTP_200_OK
+            assert response.headers["content-type"] == "application/xml"
+
+            # Verify idempotency check was NOT performed
+            mock_store.is_processed.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_webhook_idempotency_no_message_sid(client):
+    """Test that missing MessageSid with idempotency enabled processes normally."""
+    with patch.object(settings, "twilio_idempotency_enabled", True):
+        mock_store = AsyncMock()
+
+        with patch("app.adapters.inbound.http.routes._idempotency_store", mock_store):
+            with patch("app.adapters.inbound.http.routes.logger") as mock_logger:
+                response = client.post(
+                    "/channels/whatsapp/webhook",
+                    data={
+                        "From": "+521234567890",
+                        "Body": "Hola",
+                        # No MessageSid
+                    },
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                )
+
+                assert response.status_code == status.HTTP_200_OK
+                assert response.headers["content-type"] == "application/xml"
+
+                # Verify warning was logged
+                mock_logger.warning.assert_called_once()
+                assert "MessageSid" in mock_logger.warning.call_args[0][0]
+
+                # Verify idempotency check was NOT performed
+                mock_store.is_processed.assert_not_called()

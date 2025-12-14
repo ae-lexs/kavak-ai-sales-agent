@@ -9,6 +9,8 @@ from app.adapters.outbound.conversation_state_repository import (
     InMemoryConversationStateRepository,
     PostgresConversationStateRepository,
 )
+from app.adapters.outbound.idempotency.noop_idempotency_store import NoOpIdempotencyStore
+from app.adapters.outbound.idempotency.redis_idempotency_store import RedisIdempotencyStore
 from app.adapters.outbound.knowledge_base.local_markdown_knowledge_base_repository import (
     LocalMarkdownKnowledgeBaseRepository,
 )
@@ -19,6 +21,7 @@ from app.adapters.outbound.lead import (
 from app.adapters.outbound.llm.openai_llm_client import OpenAILLMClient
 from app.application.ports.car_catalog_repository import CarCatalogRepository
 from app.application.ports.conversation_state_repository import ConversationStateRepository
+from app.application.ports.idempotency_store import IdempotencyStore
 from app.application.ports.knowledge_base_repository import KnowledgeBaseRepository
 from app.application.ports.lead_repository import LeadRepository
 from app.application.ports.llm_client import LLMClient
@@ -106,6 +109,24 @@ def create_lead_repository() -> LeadRepository:
         return PostgresLeadRepository()
     else:
         return InMemoryLeadRepository()
+
+
+def create_idempotency_store() -> IdempotencyStore:
+    """
+    Factory function to create idempotency store.
+
+    Returns:
+        IdempotencyStore instance (Redis or NoOp)
+    """
+    if not settings.twilio_idempotency_enabled:
+        return NoOpIdempotencyStore()
+
+    if not settings.redis_url:
+        # If idempotency is enabled but Redis URL is not configured, use no-op
+        # This allows the service to start but idempotency won't work
+        return NoOpIdempotencyStore()
+
+    return RedisIdempotencyStore(settings.redis_url)
 
 
 def create_handle_chat_turn_use_case() -> HandleChatTurnUseCase:

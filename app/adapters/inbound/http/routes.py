@@ -10,10 +10,11 @@ from app.adapters.inbound.http.twilio_utils import (
 )
 from app.application.dtos.chat import ChatRequest, ChatResponse
 from app.infrastructure.config.settings import settings
-from app.infrastructure.logging.logger import log_turn
+from app.infrastructure.logging.logger import log_turn, logger
 from app.infrastructure.wiring.dependencies import (
     create_conversation_state_repository,
     create_handle_chat_turn_use_case,
+    create_idempotency_store,
     create_lead_repository,
 )
 
@@ -23,6 +24,7 @@ router = APIRouter()
 _handle_chat_turn_use_case = create_handle_chat_turn_use_case()
 _state_repository = create_conversation_state_repository()
 _lead_repository = create_lead_repository()
+_idempotency_store = create_idempotency_store()
 
 
 @router.get("/health", status_code=status.HTTP_200_OK)
@@ -130,6 +132,33 @@ async def whatsapp_webhook(
                 detail="Twilio signature validation failed",
             ) from err
 
+    # Idempotency check: if MessageSid exists and idempotency is enabled
+    if MessageSid and settings.twilio_idempotency_enabled:
+        if await _idempotency_store.is_processed(MessageSid):
+            # Get stored response if available
+            stored_response = await _idempotency_store.get_response(MessageSid)
+            if stored_response:
+                # Return stored TwiML response
+                return Response(
+                    content=stored_response,
+                    media_type="application/xml",
+                    status_code=status.HTTP_200_OK,
+                )
+            else:
+                # Return safe no-op TwiML message in Spanish
+                safe_message = (
+                    "Mensaje recibido. Si necesitas ayuda adicional, dime en qué puedo apoyarte."
+                )
+                twiml = generate_twiml_response(safe_message)
+                return Response(
+                    content=twiml,
+                    media_type="application/xml",
+                    status_code=status.HTTP_200_OK,
+                )
+    elif MessageSid is None and settings.twilio_idempotency_enabled:
+        # Log warning if MessageSid is missing but idempotency is enabled
+        logger.warning("MessageSid missing in Twilio webhook request but idempotency is enabled")
+
     # Generate turn_id for request correlation
     turn_id = str(uuid4())
 
@@ -170,6 +199,18 @@ async def whatsapp_webhook(
 
     # Generate TwiML response
     twiml = generate_twiml_response(chat_response.reply)
+
+    # Store idempotency marker and response if MessageSid exists and idempotency is enabled
+    if MessageSid and settings.twilio_idempotency_enabled:
+        await _idempotency_store.mark_processed(
+            MessageSid,
+            settings.twilio_idempotency_ttl_seconds,
+        )
+        await _idempotency_store.store_response(
+            MessageSid,
+            twiml,
+            settings.twilio_idempotency_ttl_seconds,
+        )
 
     # Return TwiML XML response
     return Response(
