@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.adapters.outbound.state.conversation_state_repository import (
+from app.adapters.outbound.conversation_state_repository.conversation_state_repository import (
     InMemoryConversationStateRepository,
 )
 from app.domain.entities.conversation_state import ConversationState

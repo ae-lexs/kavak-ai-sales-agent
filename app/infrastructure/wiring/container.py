@@ -3,10 +3,10 @@
 from app.adapters.outbound.catalog_csv.mock_car_catalog_repository import (
     MockCarCatalogRepository,
 )
-from app.adapters.outbound.llm_rag.chat_adapter import LLMRAGChatAdapter
-from app.adapters.outbound.state.conversation_state_repository import (
+from app.adapters.outbound.conversation_state_repository.conversation_state_repository import (
     InMemoryConversationStateRepository,
 )
+from app.adapters.outbound.llm_rag.chat_adapter import LLMRAGChatAdapter
 from app.application.ports.car_catalog_repository import CarCatalogRepository
 from app.application.ports.conversation_state_repository import ConversationStateRepository
 from app.application.use_cases.chat_use_case import ChatUseCase

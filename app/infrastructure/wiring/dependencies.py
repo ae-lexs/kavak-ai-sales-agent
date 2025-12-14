@@ -5,15 +5,18 @@ from typing import Optional
 from app.adapters.outbound.catalog.csv_car_catalog_repository import (
     CSVCarCatalogRepository,
 )
-from app.adapters.outbound.knowledge_base.local_markdown_knowledge_base_repository import (
-    LocalMarkdownKnowledgeBaseRepository,
-)
-from app.adapters.outbound.lead.lead_repository import InMemoryLeadRepository
-from app.adapters.outbound.llm.openai_llm_client import OpenAILLMClient
-from app.adapters.outbound.state import (
+from app.adapters.outbound.conversation_state_repository import (
     InMemoryConversationStateRepository,
     PostgresConversationStateRepository,
 )
+from app.adapters.outbound.knowledge_base.local_markdown_knowledge_base_repository import (
+    LocalMarkdownKnowledgeBaseRepository,
+)
+from app.adapters.outbound.lead import (
+    InMemoryLeadRepository,
+    PostgresLeadRepository,
+)
+from app.adapters.outbound.llm.openai_llm_client import OpenAILLMClient
 from app.application.ports.car_catalog_repository import CarCatalogRepository
 from app.application.ports.conversation_state_repository import ConversationStateRepository
 from app.application.ports.knowledge_base_repository import KnowledgeBaseRepository
@@ -32,9 +35,9 @@ def create_conversation_state_repository() -> ConversationStateRepository:
     Returns:
         ConversationStateRepository instance
     """
-    if settings.state_repository == "postgres":
+    if settings.conversation_state_repository == "postgres":
         if not settings.database_url:
-            raise ValueError("DATABASE_URL is required when STATE_REPOSITORY=postgres")
+            raise ValueError("DATABASE_URL is required when CONVERSATION_STATE_REPOSITORY=postgres")
         return PostgresConversationStateRepository()
     else:
         return InMemoryConversationStateRepository()
@@ -97,7 +100,12 @@ def create_lead_repository() -> LeadRepository:
     Returns:
         LeadRepository instance
     """
-    return InMemoryLeadRepository()
+    if settings.lead_repository == "postgres":
+        if not settings.database_url:
+            raise ValueError("DATABASE_URL is required when LEAD_REPOSITORY=postgres")
+        return PostgresLeadRepository()
+    else:
+        return InMemoryLeadRepository()
 
 
 def create_handle_chat_turn_use_case() -> HandleChatTurnUseCase:

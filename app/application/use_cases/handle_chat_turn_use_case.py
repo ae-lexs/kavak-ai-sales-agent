@@ -108,6 +108,11 @@ class HandleChatTurnUseCase:
         else:
             step_before = state.step
 
+        # Store lead fields before processing to detect changes
+        lead_name_before = state.lead_name
+        lead_phone_before = state.lead_phone
+        lead_preferred_contact_time_before = state.lead_preferred_contact_time
+
         # Check if this is an FAQ question and route to RAG if so
         if self._is_faq_intent(request.message) and self._faq_rag_service:
             self._log(
@@ -174,6 +179,27 @@ class HandleChatTurnUseCase:
             and state.step != "handoff_to_human"
         ):
             state.step = "collect_contact_info"
+            # Load existing lead when transitioning to collect_contact_info
+            if self._lead_repository:
+                existing_lead = await self._lead_repository.get(request.session_id)
+                if existing_lead:
+                    # Merge existing lead data into state
+                    if existing_lead.name and not state.lead_name:
+                        state.lead_name = existing_lead.name
+                    if existing_lead.phone and not state.lead_phone:
+                        state.lead_phone = existing_lead.phone
+                    if (
+                        existing_lead.preferred_contact_time
+                        and not state.lead_preferred_contact_time
+                    ):
+                        state.lead_preferred_contact_time = existing_lead.preferred_contact_time
+                    self._log(
+                        request.session_id,
+                        turn_id,
+                        "use_case",
+                        lead_capture_triggered=True,
+                        lead_capture_existing_lead_loaded=True,
+                    )
 
         # Log missing fields
         missing_field = state.get_next_missing_field()
@@ -216,29 +242,151 @@ class HandleChatTurnUseCase:
                 flow_step_after=state.step,
             )
 
+        # Load existing lead if any when in next_action step (before processing message)
+        # This ensures existing lead data is available when lead capture is triggered
+        if state.step == "next_action" and self._lead_repository:
+            existing_lead = await self._lead_repository.get(request.session_id)
+            if existing_lead:
+                # Merge existing lead data into state
+                if existing_lead.name and not state.lead_name:
+                    state.lead_name = existing_lead.name
+                if existing_lead.phone and not state.lead_phone:
+                    state.lead_phone = existing_lead.phone
+                if existing_lead.preferred_contact_time and not state.lead_preferred_contact_time:
+                    state.lead_preferred_contact_time = existing_lead.preferred_contact_time
+                self._log(
+                    request.session_id,
+                    turn_id,
+                    "use_case",
+                    lead_capture_triggered=True,
+                    lead_capture_existing_lead_loaded=True,
+                )
+
         # Determine next action and generate response
-        reply, next_action, suggested_questions = self._generate_response(state, cars)
+        reply, next_action, suggested_questions = self._generate_response(
+            state, cars, request.session_id, turn_id
+        )
 
         # Handle lead capture trigger from next_action
         if next_action == "ask_contact_info" and state.step != "collect_contact_info":
             state.step = "collect_contact_info"
+            # Load existing lead if any when starting lead capture (if not already loaded)
+            if self._lead_repository and not (
+                state.lead_name or state.lead_phone or state.lead_preferred_contact_time
+            ):
+                existing_lead = await self._lead_repository.get(request.session_id)
+                if existing_lead:
+                    # Merge existing lead data into state
+                    if existing_lead.name and not state.lead_name:
+                        state.lead_name = existing_lead.name
+                    if existing_lead.phone and not state.lead_phone:
+                        state.lead_phone = existing_lead.phone
+                    if (
+                        existing_lead.preferred_contact_time
+                        and not state.lead_preferred_contact_time
+                    ):
+                        state.lead_preferred_contact_time = existing_lead.preferred_contact_time
+                    self._log(
+                        request.session_id,
+                        turn_id,
+                        "use_case",
+                        lead_capture_triggered=True,
+                        lead_capture_existing_lead_loaded=True,
+                    )
 
-        # Save lead if complete
-        if state.is_lead_complete() and self._lead_repository and state.step == "handoff_to_human":
-            lead = Lead(
-                session_id=state.session_id,
-                name=state.lead_name,
-                phone=state.lead_phone,
-                preferred_contact_time=state.lead_preferred_contact_time,
-                created_at=state.created_at,
-            )
-            await self._lead_repository.save(lead)
+        # Handle lead capture: save after each field is collected
+        if (
+            state.step == "collect_contact_info" or state.step == "handoff_to_human"
+        ) and self._lead_repository:
+            missing_lead_field = state.get_next_missing_lead_field()
+
+            # Detect which field was just collected by comparing before/after
+            field_collected = None
+            if not lead_name_before and state.lead_name:
+                field_collected = "lead_name"
+            elif not lead_phone_before and state.lead_phone:
+                field_collected = "lead_phone"
+            elif not lead_preferred_contact_time_before and state.lead_preferred_contact_time:
+                field_collected = "lead_preferred_contact_time"
+
+            # Log lead capture state
             self._log(
                 request.session_id,
                 turn_id,
                 "use_case",
-                action="lead_saved",
-                lead_complete=True,
+                lead_capture_triggered=True,
+                lead_capture_missing_fields=[
+                    f
+                    for f in ["lead_name", "lead_phone", "lead_preferred_contact_time"]
+                    if getattr(state, f, None) is None
+                ],
+                lead_capture_field_requested=missing_lead_field,
+                lead_capture_field_collected=field_collected,
+            )
+
+            # Save lead after each field is collected (partial or complete)
+            # Also save when transitioning to handoff_to_human to ensure final state is persisted
+            if (
+                field_collected
+                or (state.lead_name or state.lead_phone or state.lead_preferred_contact_time)
+                or state.step == "handoff_to_human"
+            ):
+                # Load existing lead to merge
+                existing_lead = await self._lead_repository.get(request.session_id)
+                if existing_lead:
+                    # Merge: use state values if present, otherwise keep existing
+                    lead = Lead(
+                        session_id=state.session_id,
+                        name=state.lead_name or existing_lead.name,
+                        phone=state.lead_phone or existing_lead.phone,
+                        preferred_contact_time=state.lead_preferred_contact_time
+                        or existing_lead.preferred_contact_time,
+                        created_at=existing_lead.created_at,  # Preserve original created_at
+                    )
+                else:
+                    # New lead
+                    lead = Lead(
+                        session_id=state.session_id,
+                        name=state.lead_name,
+                        phone=state.lead_phone,
+                        preferred_contact_time=state.lead_preferred_contact_time,
+                        created_at=state.created_at,
+                    )
+
+                await self._lead_repository.save(lead)
+
+                # Log lead save with masked phone
+                phone_masked = None
+                if lead.phone:
+                    if len(lead.phone) > 4:
+                        phone_masked = f"***{lead.phone[-4:]}"
+                    else:
+                        phone_masked = "***"
+
+                self._log(
+                    request.session_id,
+                    turn_id,
+                    "use_case",
+                    lead_repository_save_called=True,
+                    lead_saved_snapshot={
+                        "session_id": lead.session_id,
+                        "name": lead.name,
+                        "phone": phone_masked,
+                        "preferred_contact_time": lead.preferred_contact_time,
+                        "is_complete": lead.name is not None
+                        and lead.phone is not None
+                        and lead.preferred_contact_time is not None,
+                    },
+                )
+
+        # Log when lead capture is complete
+        if state.is_lead_complete() and state.step == "handoff_to_human":
+            self._log(
+                request.session_id,
+                turn_id,
+                "use_case",
+                lead_capture_complete=True,
+                next_action="handoff_to_human",
             )
 
         # Log financing calculation if applicable
@@ -643,7 +791,11 @@ class HandleChatTurnUseCase:
         return filters
 
     def _generate_response(
-        self, state: ConversationState, cars: Optional[list[CarSummary]] = None
+        self,
+        state: ConversationState,
+        cars: Optional[list[CarSummary]] = None,
+        session_id: Optional[str] = None,
+        turn_id: Optional[str] = None,
     ) -> tuple[str, str, list[str]]:
         """
         Generate response based on current state.
@@ -656,7 +808,7 @@ class HandleChatTurnUseCase:
         """
         # Check for lead capture flow first (takes priority over other flows)
         if state.step == "collect_contact_info":
-            return self._generate_lead_capture_response(state)
+            return self._generate_lead_capture_response(state, session_id, turn_id)
 
         # Check financing flow validation (before missing fields)
         # Handle financing flow: down payment -> loan term -> show plans
@@ -775,7 +927,7 @@ class HandleChatTurnUseCase:
         else:
             # All fields collected - check if we need to collect contact info
             if state.step == "collect_contact_info":
-                return self._generate_lead_capture_response(state)
+                return self._generate_lead_capture_response(state, session_id, turn_id)
             # All fields collected, ask about next action
             return (
                 UserMessagesES.COMPLETE,
@@ -862,18 +1014,32 @@ class HandleChatTurnUseCase:
             )
 
     def _generate_lead_capture_response(
-        self, state: ConversationState
+        self,
+        state: ConversationState,
+        session_id: Optional[str] = None,
+        turn_id: Optional[str] = None,
     ) -> tuple[str, str, list[str]]:
         """
         Generate response for lead capture flow.
 
         Args:
             state: Current conversation state
+            session_id: Session identifier for logging
+            turn_id: Turn identifier for logging
 
         Returns:
             Tuple of (reply, next_action, suggested_questions) - all in Spanish
         """
         missing_lead_field = state.get_next_missing_lead_field()
+
+        # Log when a field is requested
+        if missing_lead_field and session_id and turn_id:
+            self._log(
+                session_id,
+                turn_id,
+                "use_case",
+                lead_capture_field_requested=missing_lead_field,
+            )
 
         if missing_lead_field == "lead_name":
             # Set step to collect_contact_info to enable extraction
