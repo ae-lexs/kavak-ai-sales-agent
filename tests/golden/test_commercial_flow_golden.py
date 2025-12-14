@@ -259,6 +259,10 @@ async def test_golden_faq_intent_routing_with_rag():
         or "información" in reply_lower
         or "kavak" in reply_lower
     )
+    # Verify improved formatting: no raw numbering or section headers
+    assert "8. " not in response.reply and "2. " not in response.reply
+    assert "Periodo de Prueba y Garantía" not in response.reply
+    assert "Presencia Nacional" not in response.reply
 
 
 @pytest.mark.asyncio
@@ -339,14 +343,17 @@ async def test_golden_lead_capture_complete_flow(use_case_with_lead_repo):
     assert "nombre" in response1.reply.lower() or "llamas" in response1.reply.lower()
     assert all(isinstance(q, str) for q in response1.suggested_questions)
 
-    # Step 8: Provide name
+    # Step 8: Provide name (test direct input without "me llamo" prefix)
     response2 = await use_case.execute(
-        ChatRequest(session_id=session_id, message="Me llamo Juan Pérez", channel="api")
+        ChatRequest(session_id=session_id, message="Juan Pérez", channel="api")
     )
 
-    # Assert: Should ask for phone
+    # Assert: Should ask for phone (not name again)
     assert response2.next_action == "collect_contact_info"
     assert "teléfono" in response2.reply.lower() or "whatsapp" in response2.reply.lower()
+    assert "cómo te llamas" not in response2.reply.lower(), (
+        "Should not ask for name again after it's provided"
+    )
 
     # Verify name was saved (partial lead)
     saved_lead = await lead_repo.get(session_id)
@@ -355,14 +362,16 @@ async def test_golden_lead_capture_complete_flow(use_case_with_lead_repo):
     assert saved_lead.phone is None
     assert saved_lead.preferred_contact_time is None
 
-    # Step 9: Provide phone
+    # Step 9: Provide phone (test direct input)
     response3 = await use_case.execute(
-        ChatRequest(session_id=session_id, message="Mi teléfono es 1234567890", channel="api")
+        ChatRequest(session_id=session_id, message="+525512345678", channel="api")
     )
 
-    # Assert: Should ask for preferred contact time
+    # Assert: Should ask for preferred contact time (not phone or name again)
     assert response3.next_action == "collect_contact_info"
     assert "horario" in response3.reply.lower() or "contact" in response3.reply.lower()
+    assert "teléfono" not in response3.reply.lower(), "Should not ask for phone after it's provided"
+    assert "cómo te llamas" not in response3.reply.lower(), "Should not ask for name again"
 
     # Verify phone was saved (name preserved)
     saved_lead = await lead_repo.get(session_id)
@@ -371,9 +380,10 @@ async def test_golden_lead_capture_complete_flow(use_case_with_lead_repo):
     assert saved_lead.phone is not None  # Phone added
     assert "+52" in saved_lead.phone or "1234567890" in saved_lead.phone
 
-    # Step 10: Provide preferred contact time
+    # Step 10: Provide preferred contact time (test with "Mañana en la tarde"
+    # to verify "tarde" is extracted)
     response4 = await use_case.execute(
-        ChatRequest(session_id=session_id, message="Mañana", channel="api")
+        ChatRequest(session_id=session_id, message="Mañana en la tarde", channel="api")
     )
 
     # Assert: Should complete and set handoff_to_human
@@ -385,8 +395,10 @@ async def test_golden_lead_capture_complete_flow(use_case_with_lead_repo):
     assert saved_lead is not None
     assert saved_lead.name == "Juan Pérez"
     assert saved_lead.phone is not None
+    assert "+525512345678" in saved_lead.phone or saved_lead.phone == "+521234567890"
     assert saved_lead.preferred_contact_time is not None
-    assert saved_lead.preferred_contact_time.lower() in ["morning", "mañana"]
+    # "Mañana en la tarde" should extract "afternoon" (tarde), not "morning" (mañana)
+    assert saved_lead.preferred_contact_time.lower() in ["afternoon", "tarde"]
 
     # Assert all responses are in Spanish
     import re

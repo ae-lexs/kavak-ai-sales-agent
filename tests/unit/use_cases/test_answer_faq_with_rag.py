@@ -106,6 +106,9 @@ def test_sedes_query_returns_spanish_answer():
     # Should contain sedes/location information from KB
     assert "sedes" in reply.lower() or "puebla" in reply.lower() or "15" in reply
     assert len(suggested_questions) > 0
+    # Verify formatting improvements: no raw numbering or section headers
+    assert "2. " not in reply and "2.1 " not in reply
+    assert "Presencia Nacional" not in reply
 
 
 def test_return_policy_query_returns_spanish_answer():
@@ -395,5 +398,84 @@ def test_multiple_chunks_second_above_threshold_adds_supplementary():
     reply, _ = service.execute("garantía")
 
     assert "No tengo esa información con certeza" not in reply
-    # Should have supplementary info
-    assert "Además" in reply or "además" in reply
+    # Verify formatting improvements: no raw numbering or section headers
+    assert "8. " not in reply and "2. " not in reply
+    assert "Periodo de Prueba y Garantía" not in reply
+    assert "Presencia Nacional" not in reply
+
+
+def test_formatter_removes_raw_numbering():
+    """Test that formatter removes raw numbering from KB content."""
+    from app.application.use_cases.rag_answer_formatter import RagAnswerFormatter
+
+    raw_text = "## 2. Presencia Nacional\n\n### 2.1 Puebla\n\n**Kavak Explanada**\nCalle Ignacio Allende 512"
+    formatted = RagAnswerFormatter.format(raw_text)
+
+    # Should not contain raw numbering
+    assert "2. " not in formatted
+    assert "2.1 " not in formatted
+    assert "Presencia Nacional" not in formatted
+    # Should preserve actual content
+    assert "Kavak" in formatted or "Explanada" in formatted
+
+
+def test_formatter_improves_conversational_flow():
+    """Test that formatter improves conversational flow for location queries."""
+    from app.application.use_cases.rag_answer_formatter import RagAnswerFormatter
+
+    raw_text = "## 2. Presencia Nacional\n\nActualmente, Kavak cuenta con 15 sedes y 13 centros de inspección.\n\n### 2.1 Puebla\n\n**Kavak Explanada**\nCalle Ignacio Allende 512, Santiago Momoxpan, Puebla, 72760\nHorario: Lunes a domingo, 9:00 a.m. – 6:00 p.m."
+    formatted = RagAnswerFormatter.format(raw_text)
+
+    # Should start with natural sentence
+    assert formatted.lower().startswith(("kavak", "actualmente", "en "))
+    # Should not contain raw structure
+    assert "2. " not in formatted
+    assert "2.1 " not in formatted
+    # Should preserve factual content
+    assert "15 sedes" in formatted or "sedes" in formatted.lower()
+    assert "Puebla" in formatted or "puebla" in formatted.lower()
+
+
+def test_formatter_groups_location_information():
+    """Test that formatter groups location information logically."""
+    from app.application.use_cases.rag_answer_formatter import RagAnswerFormatter
+
+    raw_text = "### 2.1 Puebla\n\n**Kavak Explanada**\nCalle Ignacio Allende 512, Santiago Momoxpan, Puebla, 72760\nHorario: Lunes a domingo, 9:00 a.m. – 6:00 p.m.\n\n**Kavak Las Torres**\nBlvd. Municipio Libre 1910"
+    formatted = RagAnswerFormatter.format(raw_text)
+
+    # Should group locations with city context
+    assert "Puebla" in formatted or "puebla" in formatted.lower()
+    # Should format locations nicely (may use bullets or indentation)
+    assert "Explanada" in formatted or "Explanada" in formatted
+    # Should preserve addresses and hours
+    assert "Calle Ignacio Allende" in formatted or "72760" in formatted
+
+
+def test_formatter_removes_conclusion_artifacts():
+    """Test that formatter handles conclusions gracefully."""
+    from app.application.use_cases.rag_answer_formatter import RagAnswerFormatter
+
+    raw_text = "Kavak es una empresa mexicana.\n\n## 10. Conclusión\n\nKavak México es un referente en la compra y venta de autos seminuevos."
+    formatted = RagAnswerFormatter.format(raw_text)
+
+    # Should remove conclusion section header
+    assert "10. " not in formatted
+    assert "Conclusión" not in formatted
+    # Should preserve main content
+    assert "Kavak" in formatted or "mexicana" in formatted.lower()
+
+
+def test_formatter_preserves_factual_content():
+    """Test that formatter preserves all factual content while improving format."""
+    from app.application.use_cases.rag_answer_formatter import RagAnswerFormatter
+
+    raw_text = "## 8. Periodo de Prueba y Garantía\n\n* **7 días o 300 km** de prueba.\n* Devolución garantizada si el auto no convence.\n* **Garantía de 3 meses**, con opción de extender hasta 1 año."
+    formatted = RagAnswerFormatter.format(raw_text)
+
+    # Should preserve all key facts
+    assert "7 días" in formatted or "300 km" in formatted
+    assert "devolución" in formatted.lower() or "garantizada" in formatted.lower()
+    assert "3 meses" in formatted or "garantía" in formatted.lower()
+    # Should remove raw structure
+    assert "8. " not in formatted
+    assert "Periodo de Prueba y Garantía" not in formatted

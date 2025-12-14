@@ -171,13 +171,29 @@ class HandleChatTurnUseCase:
             "si quiero",
             "quiero agendar",
             "me interesa agendar",
+            "me gustaría agendar",
+            "me gustaria agendar",
+            "sí, me gustaría agendar",
+            "si, me gustaria agendar",
         ]
+        # Check if user wants to schedule appointment
+        wants_appointment = any(keyword in message_lower for keyword in scheduling_keywords)
+        # User has seen financing plans if loan_term is set (indicates financing flow completed)
+        has_financing_info = state.loan_term is not None
+
+        # Trigger lead capture if user wants appointment and we have financing info
+        # (This covers the case where user just saw financing plans and wants to schedule)
+        # Also allow if flow is complete or step indicates readiness
         if (
-            state.is_complete()
-            and any(keyword in message_lower for keyword in scheduling_keywords)
-            and state.step != "collect_contact_info"
-            and state.step != "handoff_to_human"
+            wants_appointment
+            and (
+                has_financing_info
+                or state.is_complete()
+                or state.step in ["next_action", "financing"]
+            )
+            and state.step not in ["collect_contact_info", "handoff_to_human"]
         ):
+            # Force step to collect_contact_info to ensure lead capture starts
             state.step = "collect_contact_info"
             # Load existing lead when transitioning to collect_contact_info
             if self._lead_repository:
@@ -626,9 +642,22 @@ class HandleChatTurnUseCase:
         if any(word in message_lower for word in contact_keywords + purchase_intent_keywords):
             state.step = "next_action"
 
-        # Extract lead information when in next_action step
-        if state.step == "next_action" or state.step == "collect_contact_info":
+        # Extract lead information when in lead capture flow
+        # Check if we're in lead capture by checking step OR if we have partial lead data
+        # (This handles cases where step might not be set yet but we're collecting lead info)
+        # Also check if the last question was asking for contact info
+        # (indicates we're in lead capture)
+        is_lead_capture_flow = (
+            state.step in ["next_action", "collect_contact_info", "handoff_to_human"]
+            or state.lead_name is not None
+            or state.lead_phone is not None
+            or state.lead_preferred_contact_time is not None
+            or (state.last_question and "datos de contacto" in state.last_question.lower())
+        )
+
+        if is_lead_capture_flow:
             # Extract name - look for patterns like "me llamo", "mi nombre es", "soy"
+            # Also handle direct name input (e.g., "Juan Pérez") when in lead capture flow
             if state.lead_name is None:
                 name_patterns = [
                     r"me llamo\s+([A-Za-zÁÉÍÓÚáéíóúÑñ\s]+)",
@@ -637,15 +666,43 @@ class HandleChatTurnUseCase:
                     r"nombre:\s*([A-Za-zÁÉÍÓÚáéíóúÑñ\s]+)",
                     r"name:\s*([A-Za-zÁÉÍÓÚáéíóúÑñ\s]+)",
                 ]
+                name_extracted = False
                 for pattern in name_patterns:
                     match = re.search(pattern, message, re.IGNORECASE)
                     if match:
                         state.lead_name = match.group(1).strip()
+                        name_extracted = True
                         break
+
+                # Fallback: if in lead capture flow and no name pattern matched,
+                # check if message looks like a name (2-3 words, mostly letters, no numbers)
+                # This works for both "next_action" and "collect_contact_info" steps
+                if not name_extracted:
+                    # Simple heuristic: 2-3 words, each word is letters only, at least one
+                    # starts with capital
+                    words = message.strip().split()
+                    if 2 <= len(words) <= 3:
+                        # Check if all words are letters only and at least one starts with capital
+                        if all(
+                            re.match(r"^[A-Za-zÁÉÍÓÚáéíóúÑñ]+$", word) for word in words
+                        ) and any(word[0].isupper() for word in words):
+                            # Check it's not a phone number or other pattern
+                            if not re.search(r"\d", message) and not re.search(
+                                r"@|http|www|\.com|\.mx", message, re.IGNORECASE
+                            ):
+                                state.lead_name = message.strip()
+                                name_extracted = True
+                                # Ensure step is set to collect_contact_info when we extract a name
+                                if state.step == "next_action":
+                                    state.step = "collect_contact_info"
 
             # Extract phone - look for phone patterns (Mexican format: 10 digits,
             # possibly with +52, spaces, dashes)
-            if state.lead_phone is None:
+            # Extract phone if we're in lead capture and name is already set
+            # (or if phone pattern matches)
+            if state.lead_phone is None and (
+                state.lead_name is not None or state.step == "collect_contact_info"
+            ):
                 phone_patterns = [
                     r"(\+52\s?)?([1-9]\d{9})",  # +52 followed by 10 digits
                     r"(\d{10})",  # 10 consecutive digits
@@ -666,10 +723,18 @@ class HandleChatTurnUseCase:
                             state.lead_phone = f"+52{phone}"
                         else:
                             state.lead_phone = phone
+                        # Ensure step is set to collect_contact_info when we extract a phone
+                        if state.step == "next_action":
+                            state.step = "collect_contact_info"
                         break
 
             # Extract preferred contact time
-            if state.lead_preferred_contact_time is None:
+            # Extract time if we're in lead capture and name+phone are already set
+            # (or if time pattern matches)
+            if state.lead_preferred_contact_time is None and (
+                (state.lead_name is not None and state.lead_phone is not None)
+                or state.step == "collect_contact_info"
+            ):
                 time_patterns = [
                     r"(mañana|morning)",
                     r"(tarde|afternoon)",
@@ -679,26 +744,49 @@ class HandleChatTurnUseCase:
                     r"(\d{1,2}:\d{2})",
                 ]
                 time_keywords = {
-                    "mañana": "morning",
-                    "morning": "morning",
+                    # Order matters: more specific/preferred times first
                     "tarde": "afternoon",
                     "afternoon": "afternoon",
                     "noche": "evening",
                     "evening": "evening",
                     "night": "evening",
+                    "mañana": "morning",
+                    "morning": "morning",
                     "día": "anytime",
                     "day": "anytime",
                 }
+                # Check for keywords, prioritizing later matches (more specific)
+                # This handles cases like "Mañana en la tarde" where "tarde" should win
+                found_keywords = []
                 for keyword, value in time_keywords.items():
                     if keyword in message_lower:
-                        state.lead_preferred_contact_time = value
-                        break
+                        found_keywords.append((keyword, value))
+                # If multiple keywords found, prefer the one that appears later in the message
+                # or prefer afternoon/evening over morning if both present
+                if found_keywords:
+                    if len(found_keywords) > 1:
+                        # Check message positions to see which appears later
+                        positions = [(message_lower.find(kw), val) for kw, val in found_keywords]
+                        # Sort by position (later = higher index), then by preference
+                        positions.sort(
+                            key=lambda x: (x[0], -1 if x[1] in ["afternoon", "evening"] else 0)
+                        )
+                        state.lead_preferred_contact_time = positions[-1][1]
+                    else:
+                        state.lead_preferred_contact_time = found_keywords[0][1]
+                    # Ensure step is set to collect_contact_info when we extract contact time
+                    if state.step == "next_action":
+                        state.step = "collect_contact_info"
                 # If no keyword match, check for time patterns
                 if state.lead_preferred_contact_time is None:
                     for pattern in time_patterns:
                         match = re.search(pattern, message_lower)
                         if match:
                             state.lead_preferred_contact_time = match.group(0).strip()
+                            # Ensure step is set to collect_contact_info when we
+                            # extract contact time
+                            if state.step == "next_action":
+                                state.step = "collect_contact_info"
                             break
 
     def _is_faq_intent(self, message: str) -> bool:
@@ -812,7 +900,13 @@ class HandleChatTurnUseCase:
 
         # Check financing flow validation (before missing fields)
         # Handle financing flow: down payment -> loan term -> show plans
-        if state.financing_interest and state.selected_car_price:
+        # Skip financing flow if we're already in lead capture
+        if (
+            state.financing_interest
+            and state.selected_car_price
+            and state.step != "collect_contact_info"
+            and state.step != "handoff_to_human"
+        ):
             if state.down_payment is None:
                 return (
                     UserMessagesES.ask_down_payment(state.selected_car_price),

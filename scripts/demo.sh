@@ -33,7 +33,11 @@ print_response() {
 print_suggested() {
     echo -e "${YELLOW}Suggested questions:${NC}"
     if [ "$USE_JQ" = true ]; then
-        echo "$1" | jq -r '.suggested_questions[]' | sed 's/^/  - /'
+        # Use jq with error handling for control characters
+        echo "$1" | jq -r '.suggested_questions[]? // empty' 2>/dev/null | sed 's/^/  - /' || {
+            # Fallback if jq fails
+            echo "$1" | grep -o '"suggested_questions":\[[^]]*\]' | sed 's/"suggested_questions":\[//;s/\]//;s/"//g;s/,/\n/g' | sed 's/^/  - /'
+        }
     else
         echo "$1" | grep -o '"suggested_questions":\[[^]]*\]' | sed 's/"suggested_questions":\[//;s/\]//;s/"//g;s/,/\n/g' | sed 's/^/  - /'
     fi
@@ -50,15 +54,26 @@ make_request() {
             -H "Content-Type: application/json" \
             -d "{\"session_id\": \"${SESSION_ID}\", \"message\": \"${message}\", \"channel\": \"api\"}")
         
-        local reply=$(echo "$response" | jq -r '.reply')
-        print_response "$reply"
-        print_suggested "$response"
+        # Use jq with -R flag to handle raw input and properly parse JSON with control characters
+        # First validate JSON, then extract reply
+        if echo "$response" | jq . >/dev/null 2>&1; then
+            local reply=$(echo "$response" | jq -r '.reply // empty' 2>/dev/null)
+            print_response "$reply"
+            print_suggested "$response"
+        else
+            # Fallback to grep if jq fails
+            local reply=$(echo "$response" | grep -o '"reply":"[^"]*"' | sed 's/"reply":"//;s/"$//' | sed 's/\\n/\n/g')
+            print_response "$reply"
+            echo -e "${YELLOW}Suggested questions:${NC}"
+            echo "$response" | grep -o '"suggested_questions":\[[^]]*\]' | sed 's/"suggested_questions":\[//;s/\]//;s/"//g;s/,/\n/g' | sed 's/^/  - /'
+            echo ""
+        fi
     else
         response=$(curl -s -X POST "${BASE_URL}/chat" \
             -H "Content-Type: application/json" \
             -d "{\"session_id\": \"${SESSION_ID}\", \"message\": \"${message}\", \"channel\": \"api\"}")
         
-        local reply=$(echo "$response" | grep -o '"reply":"[^"]*"' | sed 's/"reply":"//;s/"$//')
+        local reply=$(echo "$response" | grep -o '"reply":"[^"]*"' | sed 's/"reply":"//;s/"$//' | sed 's/\\n/\n/g')
         print_response "$reply"
         echo -e "${YELLOW}Suggested questions:${NC}"
         echo "$response" | grep -o '"suggested_questions":\[[^]]*\]' | sed 's/"suggested_questions":\[//;s/\]//;s/"//g;s/,/\n/g' | sed 's/^/  - /'

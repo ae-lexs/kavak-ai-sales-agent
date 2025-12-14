@@ -6,6 +6,7 @@ from typing import Optional
 from app.application.dtos.knowledge import KnowledgeChunk
 from app.application.ports.knowledge_base_repository import KnowledgeBaseRepository
 from app.application.ports.llm_client import LLMClient
+from app.application.use_cases.rag_answer_formatter import RagAnswerFormatter
 from app.infrastructure.config.settings import settings
 
 
@@ -80,16 +81,15 @@ class AnswerFaqWithRag:
         # Deterministic fallback: use top chunk for answer (most relevant)
         top_chunk = chunks[0]
 
-        # Extract key information from chunk text
-        # Simple approach: use the chunk text as base and format it in Spanish
-        answer = self._format_chunk_as_answer(top_chunk.text)
+        # Build combined text from chunks for formatting
+        combined_text = top_chunk.text
 
-        # If we have multiple relevant chunks, we can add supplementary info
+        # If we have multiple relevant chunks, include them for better context
         if len(chunks) > 1 and chunks[1].score >= self.MIN_SCORE_THRESHOLD:
-            # Add context from second chunk if relevant
-            supplementary = self._extract_key_point(chunks[1].text)
-            if supplementary:
-                answer += f"\n\nAdemás, {supplementary.lower()}"
+            combined_text += f"\n\n{chunks[1].text}"
+
+        # Format using the human-friendly formatter
+        answer = RagAnswerFormatter.format(combined_text)
 
         return answer
 
@@ -143,6 +143,10 @@ class AnswerFaqWithRag:
             context={"chunks": [c.text for c in chunks]},
         )
 
+        # Format the LLM reply to ensure it's human-friendly and removes any artifacts
+        # (LLM might still include some structure from the context)
+        reply = RagAnswerFormatter.format(reply)
+
         return reply
 
     def _format_chunk_as_answer(self, text: str) -> str:
@@ -155,46 +159,8 @@ class AnswerFaqWithRag:
         Returns:
             Formatted Spanish answer using KB content directly
         """
-        # The knowledge base is already in Spanish, so we use the content directly
-        # Extract the most relevant information from the chunk
-        # Remove markdown formatting and clean up the text
-
-        # Remove markdown heading markers
-        text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
-
-        # Remove horizontal rules
-        text = re.sub(r"^---+\s*$", "", text, flags=re.MULTILINE)
-
-        # Clean up extra whitespace
-        text = re.sub(r"\n{3,}", "\n\n", text)
-        text = text.strip()
-
-        # Extract first paragraph or meaningful section (up to ~300 chars for concise answer)
-        paragraphs = text.split("\n\n")
-        if paragraphs:
-            # Use first paragraph if it's reasonable length
-            first_paragraph = paragraphs[0].strip()
-            if len(first_paragraph) > 50 and len(first_paragraph) < 400:
-                return first_paragraph
-
-            # Otherwise, take first few sentences
-            sentences = re.split(r"[.!?]\s+", text)
-            answer_parts = []
-            char_count = 0
-            for sentence in sentences:
-                if char_count + len(sentence) > 300:
-                    break
-                answer_parts.append(sentence.strip())
-                char_count += len(sentence) + 2
-
-            if answer_parts:
-                answer = ". ".join(answer_parts)
-                if not answer.endswith((".", "!", "?")):
-                    answer += "."
-                return answer
-
-        # Fallback: return first 300 characters
-        return text[:300].strip() + ("..." if len(text) > 300 else "")
+        # Use the human-friendly formatter to clean and format the text
+        return RagAnswerFormatter.format(text)
 
     def _extract_key_point(self, text: str) -> str:
         """
