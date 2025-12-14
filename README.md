@@ -98,6 +98,11 @@ The demo script simulates a full conversation flow in Spanish (need → budget �
 - `make lint` - Check code formatting and linting (read-only)
 - `make format_fix` - Automatically format code
 - `make lint_fix` - Automatically fix linting issues
+- `make db-up` - Start PostgreSQL database service (Docker Compose)
+- `make migrate` - Run database migrations to latest version
+- `make revision m="description"` - Create a new migration revision
+- `make db-status` - Show current migration status
+- `make db-rollback` - Rollback one migration
 
 ## Architecture
 
@@ -123,11 +128,12 @@ app/
 │       ├── catalog/     # Car catalog adapter (CSV)
 │       ├── knowledge_base/ # Knowledge base adapter (Markdown)
 │       ├── lead/        # Lead repository adapter (in-memory)
-│       ├── state/       # Conversation state adapter (in-memory)
+│       ├── state/       # Conversation state adapter (in-memory or postgres)
 │       └── llm_rag/     # LLM/RAG adapter
 │
 ├── infrastructure/      # Infrastructure concerns
 │   ├── config/          # Configuration management
+│   ├── db/              # Database setup (SQLAlchemy)
 │   ├── logging/        # Logging setup
 │   └── wiring/          # Dependency injection
 │
@@ -282,6 +288,51 @@ All environment variables can be passed to the container:
 - `TWILIO_AUTH_TOKEN` - Twilio auth token (optional)
 - `TWILIO_WHATSAPP_NUMBER` - Twilio WhatsApp number (optional)
 - `TWILIO_VALIDATE_SIGNATURE` - Enable signature validation (default: `false`)
+- `STATE_REPOSITORY` - State repository backend: `in_memory` (default) or `postgres`
+- `DATABASE_URL` - PostgreSQL connection string (required when `STATE_REPOSITORY=postgres`)
+
+### Database Setup (PostgreSQL)
+
+The application supports two conversation state storage backends:
+
+- **In-Memory** (default): State is stored in memory and lost on restart. Suitable for development and testing.
+- **PostgreSQL**: State persists across restarts. Suitable for production.
+
+#### Using PostgreSQL for State Persistence
+
+1. **Start the PostgreSQL database:**
+   ```bash
+   make db-up
+   # Or manually: docker compose up -d db
+   ```
+
+2. **Set environment variables:**
+   ```bash
+   export DATABASE_URL="postgresql+psycopg2://postgres:postgres@localhost:5432/kavak_agent"
+   export STATE_REPOSITORY="postgres"
+   ```
+
+3. **Run database migrations:**
+   ```bash
+   make migrate
+   # Or manually: alembic upgrade head
+   ```
+
+4. **Run the application:**
+   ```bash
+   make dev
+   # Or: uvicorn app.main:app --reload
+   ```
+
+The application will now use PostgreSQL to persist conversation state across restarts.
+
+**Note:** When using Docker Compose, the database service is automatically started and the `DATABASE_URL` is configured to connect to the `db` service. Set `STATE_REPOSITORY=postgres` in your `.env` file to enable PostgreSQL persistence.
+
+**Migration Commands:**
+- `make migrate` - Apply all pending migrations
+- `make revision m="description"` - Create a new migration
+- `make db-status` - Show current migration status
+- `make db-rollback` - Rollback one migration
 
 ### Local Development (Python)
 

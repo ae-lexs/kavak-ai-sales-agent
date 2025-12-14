@@ -1,6 +1,24 @@
 version: '3.8'
 
 services:
+  db:
+    image: postgres:16
+    container_name: kavak-agent-db
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=kavak_agent
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   kavak-agent:
     build:
       context: .
@@ -12,6 +30,8 @@ services:
       # Application Configuration
       - DEBUG_MODE=${DEBUG_MODE:-false}
       - STATE_TTL_SECONDS=${STATE_TTL_SECONDS:-86400}
+      - STATE_REPOSITORY=${STATE_REPOSITORY:-postgres}
+      - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg2://postgres:postgres@db:5432/kavak_agent}
       
       # Twilio Configuration (optional)
       - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
@@ -24,6 +44,9 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
       - OPENAI_TIMEOUT_SECONDS=${OPENAI_TIMEOUT_SECONDS:-10}
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
@@ -31,4 +54,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 5s
+
+volumes:
+  postgres_data:
 

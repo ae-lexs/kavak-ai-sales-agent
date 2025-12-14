@@ -31,3 +31,25 @@ format_fix:
 # Fix linting issues automatically (where possible)
 lint_fix:
 	python3 -m ruff check --fix .
+
+# Database migrations
+# Run database migrations to latest version
+migrate:
+	alembic upgrade head
+
+# Create a new migration revision
+# Usage: make revision m="description of changes"
+revision:
+	alembic revision --autogenerate -m "$(m)"
+
+# Show current migration status
+db-status:
+	alembic current
+
+# Rollback one migration
+db-rollback:
+	alembic downgrade -1
+
+# Start database service
+db-up:
+	docker compose up -d db
