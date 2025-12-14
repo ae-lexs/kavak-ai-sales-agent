@@ -8,6 +8,7 @@ from app.application.dtos.car import CarSummary
 from app.application.dtos.chat import ChatRequest
 from app.application.ports.car_catalog_repository import CarCatalogRepository
 from app.application.ports.conversation_state_repository import ConversationStateRepository
+from app.application.ports.lead_repository import LeadRepository
 from app.application.use_cases.handle_chat_turn_use_case import HandleChatTurnUseCase
 from app.domain.entities.conversation_state import ConversationState
 
@@ -59,6 +60,38 @@ class InMemoryStateRepository(ConversationStateRepository):
             del self._storage[session_id]
 
 
+class InMemoryLeadRepositoryForGolden(LeadRepository):
+    """In-memory lead repository for golden tests."""
+
+    def __init__(self) -> None:
+        """Initialize in-memory storage."""
+        from app.application.dtos.lead import Lead
+
+        self._storage: list[Lead] = []
+
+    async def get(self, session_id: str) -> Optional[Any]:
+        """Get lead by session_id."""
+
+        for lead in self._storage:
+            if lead.session_id == session_id:
+                return lead
+        return None
+
+    async def save(self, lead: Any) -> None:
+        """Save lead."""
+        # Remove existing lead for same session_id if present
+        self._storage = [
+            existing_lead
+            for existing_lead in self._storage
+            if existing_lead.session_id != lead.session_id
+        ]
+        self._storage.append(lead)
+
+    async def list(self) -> list[Any]:
+        """List all leads."""
+        return self._storage.copy()
+
+
 @pytest.fixture
 def use_case():
     """Create use case with mock dependencies."""
@@ -67,6 +100,17 @@ def use_case():
     return HandleChatTurnUseCase(
         state_repo, car_repo, lead_repository=None, faq_rag_service=None, logger=None
     )
+
+
+@pytest.fixture
+def use_case_with_lead_repo():
+    """Create use case with lead repository for lead capture tests."""
+    state_repo = InMemoryStateRepository()
+    car_repo = MockCarCatalogRepository()
+    lead_repo = InMemoryLeadRepositoryForGolden()
+    return HandleChatTurnUseCase(
+        state_repo, car_repo, lead_repository=lead_repo, faq_rag_service=None, logger=None
+    ), lead_repo
 
 
 @pytest.mark.asyncio
@@ -251,4 +295,109 @@ async def test_golden_spanish_only_outputs(use_case):
             for indicator in english_indicators:
                 assert indicator not in question_lower, (
                     f"Found English indicator '{indicator}' in question: {question}"
+                )
+
+
+@pytest.mark.asyncio
+async def test_golden_lead_capture_complete_flow(use_case_with_lead_repo):
+    """Golden test: Complete lead capture flow from start to finish."""
+    use_case, lead_repo = use_case_with_lead_repo
+    session_id = "golden_lead_capture_session"
+
+    # Complete commercial flow first
+    # Step 1: Need
+    await use_case.execute(
+        ChatRequest(session_id=session_id, message="Auto familiar", channel="api")
+    )
+
+    # Step 2: Budget
+    await use_case.execute(ChatRequest(session_id=session_id, message="$300,000", channel="api"))
+
+    # Step 3: Preferences
+    await use_case.execute(ChatRequest(session_id=session_id, message="Automática", channel="api"))
+
+    # Step 4: Financing interest
+    await use_case.execute(
+        ChatRequest(session_id=session_id, message="Sí, me interesa financiamiento", channel="api")
+    )
+
+    # Step 5: Down payment
+    await use_case.execute(
+        ChatRequest(session_id=session_id, message="10% de enganche", channel="api")
+    )
+
+    # Step 6: Loan term
+    await use_case.execute(ChatRequest(session_id=session_id, message="36 meses", channel="api"))
+
+    # Step 7: Trigger lead capture
+    response1 = await use_case.execute(
+        ChatRequest(session_id=session_id, message="Sí, agendar cita", channel="api")
+    )
+
+    # Assert: Should ask for name (first field)
+    assert response1.next_action == "collect_contact_info"
+    assert "nombre" in response1.reply.lower() or "llamas" in response1.reply.lower()
+    assert all(isinstance(q, str) for q in response1.suggested_questions)
+
+    # Step 8: Provide name
+    response2 = await use_case.execute(
+        ChatRequest(session_id=session_id, message="Me llamo Juan Pérez", channel="api")
+    )
+
+    # Assert: Should ask for phone
+    assert response2.next_action == "collect_contact_info"
+    assert "teléfono" in response2.reply.lower() or "whatsapp" in response2.reply.lower()
+
+    # Verify name was saved (partial lead)
+    saved_lead = await lead_repo.get(session_id)
+    assert saved_lead is not None
+    assert saved_lead.name == "Juan Pérez"
+    assert saved_lead.phone is None
+    assert saved_lead.preferred_contact_time is None
+
+    # Step 9: Provide phone
+    response3 = await use_case.execute(
+        ChatRequest(session_id=session_id, message="Mi teléfono es 1234567890", channel="api")
+    )
+
+    # Assert: Should ask for preferred contact time
+    assert response3.next_action == "collect_contact_info"
+    assert "horario" in response3.reply.lower() or "contact" in response3.reply.lower()
+
+    # Verify phone was saved (name preserved)
+    saved_lead = await lead_repo.get(session_id)
+    assert saved_lead is not None
+    assert saved_lead.name == "Juan Pérez"  # Name preserved
+    assert saved_lead.phone is not None  # Phone added
+    assert "+52" in saved_lead.phone or "1234567890" in saved_lead.phone
+
+    # Step 10: Provide preferred contact time
+    response4 = await use_case.execute(
+        ChatRequest(session_id=session_id, message="Mañana", channel="api")
+    )
+
+    # Assert: Should complete and set handoff_to_human
+    assert response4.next_action == "handoff_to_human"
+    assert "asesor" in response4.reply.lower() or "contacto" in response4.reply.lower()
+
+    # Verify complete lead was saved
+    saved_lead = await lead_repo.get(session_id)
+    assert saved_lead is not None
+    assert saved_lead.name == "Juan Pérez"
+    assert saved_lead.phone is not None
+    assert saved_lead.preferred_contact_time is not None
+    assert saved_lead.preferred_contact_time.lower() in ["morning", "mañana"]
+
+    # Assert all responses are in Spanish
+    import re
+
+    for response in [response1, response2, response3, response4]:
+        english_indicators = ["what", "choose", "select", "please", "thank you"]
+        reply_lower = response.reply.lower()
+        for indicator in english_indicators:
+            # Use word boundaries to avoid false positives (e.g., "whatsapp" contains "what")
+            pattern = r"\b" + re.escape(indicator) + r"\b"
+            if re.search(pattern, reply_lower):
+                raise AssertionError(
+                    f"Found English indicator '{indicator}' in reply: {response.reply}"
                 )

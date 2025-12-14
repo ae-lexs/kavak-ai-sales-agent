@@ -6,8 +6,8 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.adapters.outbound.state.models import Base
-from app.adapters.outbound.state.postgres_conversation_state_repository import (
+from app.adapters.outbound.conversation_state_repository.models import Base
+from app.adapters.outbound.conversation_state_repository.postgres_conversation_state_repository import (  # noqa: E501
     PostgresConversationStateRepository,
 )
 from app.domain.entities.conversation_state import ConversationState
@@ -40,7 +40,7 @@ def repository(sqlite_engine, monkeypatch):
         return SessionLocal()
 
     monkeypatch.setattr(
-        "app.adapters.outbound.state.postgres_conversation_state_repository.get_db_session",
+        "app.adapters.outbound.conversation_state_repository.postgres_conversation_state_repository.get_db_session",
         get_test_db_session,
     )
 

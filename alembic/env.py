@@ -5,9 +5,11 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
+from app.adapters.outbound.conversation_state_repository.models import Base
 
 # Import models and settings
-from app.adapters.outbound.state.models import Base
+# Import all models to ensure they're registered with Base.metadata
+from app.adapters.outbound.lead.models import LeadModel  # noqa: F401
 from app.infrastructure.config.settings import settings
 
 # this is the Alembic Config object, which provides

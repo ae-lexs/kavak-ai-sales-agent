@@ -59,9 +59,18 @@ class MockLeadRepository(LeadRepository):
     def __init__(self) -> None:
         """Initialize mock repository."""
         self._storage: list[Lead] = []
+        self._save_calls: list[Lead] = []  # Track all save calls
+
+    async def get(self, session_id: str) -> Optional[Lead]:
+        """Get lead by session_id."""
+        for lead in self._storage:
+            if lead.session_id == session_id:
+                return lead
+        return None
 
     async def save(self, lead: Lead) -> None:
         """Save lead."""
+        self._save_calls.append(lead)  # Track save calls
         # Remove existing lead for same session_id if present
         self._storage = [
             existing_lead

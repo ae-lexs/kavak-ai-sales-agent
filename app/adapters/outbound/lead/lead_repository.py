@@ -1,5 +1,7 @@
 """In-memory lead repository adapter."""
 
+from typing import Optional
+
 from app.application.dtos.lead import Lead
 from app.application.ports.lead_repository import LeadRepository
 
@@ -10,6 +12,21 @@ class InMemoryLeadRepository(LeadRepository):
     def __init__(self) -> None:
         """Initialize in-memory repository."""
         self._storage: list[Lead] = []
+
+    async def get(self, session_id: str) -> Optional[Lead]:
+        """
+        Get a lead by session_id.
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            Lead DTO, or None if not found
+        """
+        for lead in self._storage:
+            if lead.session_id == session_id:
+                return lead
+        return None
 
     async def save(self, lead: Lead) -> None:
         """

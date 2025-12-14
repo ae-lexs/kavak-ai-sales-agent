@@ -288,8 +288,8 @@ All environment variables can be passed to the container:
 - `TWILIO_AUTH_TOKEN` - Twilio auth token (optional)
 - `TWILIO_WHATSAPP_NUMBER` - Twilio WhatsApp number (optional)
 - `TWILIO_VALIDATE_SIGNATURE` - Enable signature validation (default: `false`)
-- `STATE_REPOSITORY` - State repository backend: `in_memory` (default) or `postgres`
-- `DATABASE_URL` - PostgreSQL connection string (required when `STATE_REPOSITORY=postgres`)
+- `CONVERSATION_STATE_REPOSITORY` - Conversation state repository backend: `in_memory` (default) or `postgres`
+- `DATABASE_URL` - PostgreSQL connection string (required when `CONVERSATION_STATE_REPOSITORY=postgres`)
 
 ### Database Setup (PostgreSQL)
 
@@ -309,7 +309,7 @@ The application supports two conversation state storage backends:
 2. **Set environment variables:**
    ```bash
    export DATABASE_URL="postgresql+psycopg2://postgres:postgres@localhost:5432/kavak_agent"
-   export STATE_REPOSITORY="postgres"
+   export CONVERSATION_STATE_REPOSITORY="postgres"
    ```
 
 3. **Run database migrations:**
@@ -326,7 +326,7 @@ The application supports two conversation state storage backends:
 
 The application will now use PostgreSQL to persist conversation state across restarts.
 
-**Note:** When using Docker Compose, the database service is automatically started and the `DATABASE_URL` is configured to connect to the `db` service. Set `STATE_REPOSITORY=postgres` in your `.env` file to enable PostgreSQL persistence.
+**Note:** When using Docker Compose, the database service is automatically started and the `DATABASE_URL` is configured to connect to the `db` service. Set `CONVERSATION_STATE_REPOSITORY=postgres` in your `.env` file to enable PostgreSQL persistence.
 
 **Migration Commands:**
 - `make migrate` - Apply all pending migrations
