@@ -62,7 +62,7 @@ services:
       - TWILIO_IDEMPOTENCY_TTL_SECONDS=${TWILIO_IDEMPOTENCY_TTL_SECONDS:-3600}
       
       # OpenAI LLM Configuration (optional)
-      - LLM_ENABLED=${LLM_ENABLED:-true}
+      - LLM_ENABLED=${LLM_ENABLED:-false}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
       - OPENAI_TIMEOUT_SECONDS=${OPENAI_TIMEOUT_SECONDS:-10}
