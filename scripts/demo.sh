@@ -70,26 +70,80 @@ echo "=========================================="
 echo "Kavak AI Sales Agent - Demo Conversation"
 echo "=========================================="
 echo ""
+echo "This demo covers:"
+echo "  1. RAG/FAQ (Sedes question)"
+echo "  2. Catalog Search (Options)"
+echo "  3. Financing Calculation"
+echo "  4. Lead Capture"
+echo "  5. Handoff"
+echo ""
+echo "=========================================="
+echo ""
 
-# Step 1: User expresses need
+# Step 1: RAG/FAQ - Sedes Question
+echo "--- Step 1: RAG/FAQ (Sedes) ---"
+make_request "¿Dónde están las sedes de Kavak?"
+echo ""
+
+# Step 2: Commercial Flow - Need
+echo "--- Step 2: Commercial Flow (Need) ---"
 make_request "Estoy buscando un auto familiar"
+echo ""
 
-# Step 2: User provides budget
+# Step 3: Budget
+echo "--- Step 3: Budget ---"
 make_request "Mi presupuesto es \$300,000"
+echo ""
 
-# Step 3: User asks about financing
-make_request "Sí, me interesa el financiamiento"
-
-# Step 4: User provides preferences (if needed) or down payment
+# Step 4: Preferences
+echo "--- Step 4: Preferences ---"
 make_request "Automático"
+echo ""
 
-# Step 5: User provides down payment
+# Step 5: Financing Interest
+echo "--- Step 5: Financing Interest ---"
+make_request "Sí, me interesa el financiamiento"
+echo ""
+
+# Step 6: Down Payment
+echo "--- Step 6: Down Payment ---"
 make_request "20%"
+echo ""
 
-# Step 6: User provides loan term
+# Step 7: Loan Term
+echo "--- Step 7: Loan Term ---"
 make_request "48 meses"
+echo ""
+
+# Step 8: Lead Capture - Appointment Interest
+echo "--- Step 8: Lead Capture (Appointment) ---"
+make_request "Sí, me gustaría agendar una cita"
+echo ""
+
+# Step 9: Lead Capture - Name
+echo "--- Step 9: Lead Capture (Name) ---"
+make_request "Juan Pérez"
+echo ""
+
+# Step 10: Lead Capture - Phone
+echo "--- Step 10: Lead Capture (Phone) ---"
+make_request "+525512345678"
+echo ""
+
+# Step 11: Lead Capture - Contact Time
+echo "--- Step 11: Lead Capture (Contact Time) ---"
+make_request "Mañana en la tarde"
+echo ""
 
 echo "=========================================="
 echo "Demo completed!"
 echo "=========================================="
+echo ""
+echo "Summary:"
+echo "  ✓ RAG/FAQ: Answered sedes question using knowledge base"
+echo "  ✓ Catalog Search: Found cars matching criteria"
+echo "  ✓ Financing: Calculated payment plan with 10% APR"
+echo "  ✓ Lead Capture: Collected name, phone, and contact time"
+echo "  ✓ Handoff: Lead ready for sales team follow-up"
+echo ""
 
