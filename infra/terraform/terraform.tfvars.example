@@ -1,0 +1,12 @@
+project_name = "kavak-agent"
+env          = "dev"
+aws_region   = "us-east-1"
+
+# Optional: Set to false to disable LLM features and reduce OpenAI API calls
+# llm_enabled = false
+
+tags = {
+  project = "kavak-agent"
+  env     = "dev"
+  owner   = "platform-team"
+}

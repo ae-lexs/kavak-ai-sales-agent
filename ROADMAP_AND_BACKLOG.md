@@ -7,6 +7,7 @@ This document describes how to take the **Kavak AI Sales Agent** from the curren
 - **README:** [`README.md`](README.md)
 - **Agent Contract:** [`docs/AGENT_CONTRACT.md`](docs/AGENT_CONTRACT.md)
 - **Demo Guide (3 minutes):** [`docs/DEMO.md`](docs/DEMO.md)
+- **Terraform Infrastructure:** [`infra/terraform/README.md`](infra/terraform/README.md) – Reproducible AWS infrastructure defined with Terraform, including networking, compute, persistence, caching, and HTTPS setup.
 
 ---
 
@@ -232,6 +233,45 @@ We combine three layers:
    - (later) offline scenario packs run against staging before release
 
 Feature flags provide an additional “operational rollback” layer: disable LLM or cache without redeploy.
+
+---
+
+## Infrastructure as Code and Reproducible Deployments
+
+A key architectural decision of this project is the use of **Terraform as the primary mechanism for defining and provisioning infrastructure**.
+
+All production-oriented resources are described declaratively and versioned alongside the application code. This allows the system to be:
+
+- **Reproducible**: any engineer can provision the same infrastructure using the same definitions.
+- **Auditable**: infrastructure changes are visible through code review and version control.
+- **Disposable**: environments can be created and destroyed safely (e.g., short-lived validation or demos).
+- **Environment-consistent**: the same components are used across local, staging, and production, with differences expressed only through variables.
+
+### Defined infrastructure components
+Using Terraform, the project defines the following AWS components with minimal, cost-aware configurations:
+
+- Virtual Private Cloud (VPC) with public and private subnets
+- Internet Gateway and NAT Gateway for controlled outbound access
+- Application Load Balancer (ALB) with HTTP → HTTPS redirection
+- ACM-managed TLS certificates for secure webhook communication
+- ECS Fargate service running the application container
+- Amazon RDS (PostgreSQL) as the source of truth for state and leads
+- Amazon ElastiCache (Redis) for idempotency and cache-aside behavior
+- IAM roles and security groups with least-privilege access
+
+All resources can be deployed using `terraform apply` and fully removed using `terraform destroy`, enabling safe experimentation without long-lived cloud costs.
+
+### Alignment with production requirements
+The Terraform setup mirrors real production needs:
+
+- HTTPS endpoints required by Twilio webhooks
+- Private networking for data stores
+- Externalized configuration via environment variables and secrets
+- Compatibility with feature flags to control behavior at runtime
+
+While the current demo may use the Twilio WhatsApp Sandbox, the infrastructure itself is production-ready. Moving to a production WhatsApp sender would require configuration changes, not architectural changes.
+
+For full details, see: [Terraform Infrastructure](infra/terraform/README.md)
 
 ---
 
