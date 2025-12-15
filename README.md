@@ -69,6 +69,7 @@ The demo script simulates a full conversation flow in Spanish (RAG/FAQ → need 
 
 - [Agent Contract](docs/AGENT_CONTRACT.md) – defines the conversational contract, flow, and guarantees.
 - [Demo Guide](docs/DEMO.md) – step-by-step 3-minute demo script (WhatsApp + backup).
+- [Terraform Infrastructure](infra/terraform/README.md) – Reproducible AWS infrastructure defined with Terraform, including networking, compute, persistence, caching, and HTTPS setup.
 
 ## Features
 

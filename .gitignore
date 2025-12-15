@@ -49,3 +49,15 @@ uvicorn.log
 # =========================
 # Data (local only)
 # Keep exampl
+
+# =========================
+# Terraform
+# =========================
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+*.tfvars.backup
+.terraformrc
+terraform.rc
